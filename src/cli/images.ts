@@ -5,6 +5,7 @@ import { locateElement, updateAttributes, attrLiteral, type AttrChange } from ".
 import { listFiles } from "../writer/files.js";
 import { searchDataFiles, applyDataEdit } from "../writer/data.js";
 import { imageSize } from "./image-size.js";
+import { updateHtmlAttributes, htmlAttr } from "../static/html.js";
 
 export interface ImageRequest {
   file?: string;
@@ -122,10 +123,45 @@ function snapshot(p: string): FileSnapshot {
   return { path: p, before: fs.existsSync(p) ? fs.readFileSync(p) : null };
 }
 
+/** Plain HTML site: the img element is at file:line:col, src is relative to the HTML file or to the root. */
+async function replaceHtmlImage(
+  root: string,
+  req: ImageRequest,
+  buf: Buffer,
+  name: string,
+): Promise<ImageResult | ImageFailure> {
+  if (!req.file || req.line == null || req.column == null)
+    return { ok: false, message: "Cannot find this image in the HTML." };
+  const abs = path.resolve(root, req.file);
+  const src = htmlAttr(root, req.file, req.line, req.column, "src");
+  if (src === null) return { ok: false, message: "This image has no src attribute in the HTML." };
+  if (/^(https?:)?\/\//i.test(src) || src.startsWith("data:"))
+    return { ok: false, message: "This image is remote. Download it and replace the src in the HTML." };
+  const currentAbs = src.startsWith("/") ? path.join(root, src) : path.resolve(path.dirname(abs), src);
+  const dir = path.dirname(currentAbs);
+  fs.mkdirSync(dir, { recursive: true });
+  const dest = uniquePath(dir, slug(name));
+  const snapshots: FileSnapshot[] = [{ path: dest, before: null }];
+  fs.writeFileSync(dest, buf);
+  const newSrc = src.startsWith("/")
+    ? "/" + path.relative(root, dest).split(path.sep).join("/")
+    : path.relative(path.dirname(abs), dest).split(path.sep).join("/");
+  const changes = [{ name: "src", value: newSrc }];
+  if (req.alt != null && req.alt !== req.currentAlt) changes.push({ name: "alt", value: req.alt });
+  const html = fs.readFileSync(abs, "utf8");
+  const out = updateHtmlAttributes(html, req.line, req.column, changes);
+  if (out === null) return { ok: false, message: "Image element not found in the HTML." };
+  snapshots.push({ path: abs, before: Buffer.from(html) });
+  fs.writeFileSync(abs, out);
+  console.log(`${pc.green("🖼")} ${pc.bold(req.file)}:${req.line}  src → ${newSrc}`);
+  return { ok: true, file: req.file, line: req.line, src: newSrc, snapshots };
+}
+
 export async function replaceImage(root: string, req: ImageRequest): Promise<ImageResult | ImageFailure> {
   const got = await bytesOf(req);
   if ("ok" in got) return got;
   const { buf, name } = got;
+  if (req.file?.toLowerCase().endsWith(".html")) return replaceHtmlImage(root, req, buf, name);
   if (buf.length > 5 * 1024 * 1024)
     console.log(pc.yellow(`  image is ${(buf.length / 1024 / 1024).toFixed(1)} MB, consider compressing it`));
   const dims = imageSize(buf);
@@ -244,6 +280,21 @@ export async function replaceImage(root: string, req: ImageRequest): Promise<Ima
 
 /** Change only the alt text of an image. */
 export function setAlt(root: string, req: ImageRequest): ImageResult | ImageFailure {
+  if (req.file?.toLowerCase().endsWith(".html") && req.line != null && req.column != null) {
+    const abs = path.resolve(root, req.file);
+    const html = fs.readFileSync(abs, "utf8");
+    const out = updateHtmlAttributes(html, req.line, req.column, [{ name: "alt", value: req.alt ?? "" }]);
+    if (out === null) return { ok: false, message: "Image element not found in the HTML." };
+    fs.writeFileSync(abs, out);
+    console.log(`${pc.green("🖼")} ${pc.bold(req.file)}:${req.line}  alt → ${JSON.stringify(req.alt ?? "")}`);
+    return {
+      ok: true,
+      file: req.file,
+      line: req.line,
+      src: req.src,
+      snapshots: [{ path: abs, before: Buffer.from(html) }],
+    };
+  }
   const decoded = decodeSrc(req.src);
   let found;
   if (decoded.kind === "public" || decoded.kind === "remote") {

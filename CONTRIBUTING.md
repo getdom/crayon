@@ -37,8 +37,15 @@ src/
     edits.ts      edit session: apply, log, undo history
   transform/    add data-crayon="file:line:col" to host JSX elements (Babel parser + magic-string)
   writer/       locate a text in the source and rewrite one literal
-    index.ts      locateTextEdit / applyTextEdit, tiered search, ancestor tie-break
+    index.ts      locateTextEdit / applyTextEdit, tiered search, expression paths, ancestor tie-break
     jsx-text.ts   JSX whitespace rules, entities, normalisation
+    attrs.ts      locate an element by attribute, rewrite attributes
+    classes.ts    swap Tailwind tokens inside className (plain, template, cn())
+    data.ts       JSON / YAML / frontmatter values
+    substring.ts  word-level match inside a text
+  static/       plain HTML sites: parse5 tagging, edits, file server
+  cli/images.ts, cli/theme.ts   image replacement, Tailwind palette and fonts
+  scripts/      demo.mjs + gif.py record the README demo
   plugins/
     loader.ts     webpack / Turbopack loader (CJS)
     next.ts       withCrayon(nextConfig)

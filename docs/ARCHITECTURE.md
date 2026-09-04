@@ -69,6 +69,14 @@ The lowest tier with hits is kept. One hit is the answer. Several hits are narro
 
 `renderJsxText` in `jsx-text.ts` reproduces Babel's `cleanJSXElementLiteralChild` so that source text and DOM text normalise to the same string.
 
+## 5. Images, styles, content files, plain HTML
+
+- **Images** (`src/cli/images.ts`): the DOM `src` is decoded (`/_next/image?url=…`, `/_next/static/media/name.hash.ext`, `/public/path`, remote URL). Public paths: the element owning `src="<literal>"` is located with `src/writer/attrs.ts` (position first, then attribute search with ancestor tie-break), the file is written next to the current one, `src`/`alt`/`height` are rewritten in one MagicString pass. Imported assets: the file is overwritten on disk, same name. Paths living in content files are updated there. Every write records file snapshots so Undo can delete created files and restore overwritten ones.
+- **Styles** (`src/writer/classes.ts`, `src/cli/theme.ts`): the overlay stages class swaps while editing, previews them with inline styles, and sends `{remove, add}` on commit. The writer collects every string literal under the `className` attribute (plain, template quasis, `cn()`/`clsx()` arguments, ternaries), removes tokens where found, adds new ones to the first literal, and reports tokens it could not find. The palette comes from `node_modules/tailwindcss/theme.css` plus the project's `@theme` blocks (v4) or `tailwindcss/colors` plus the config (v3); the overlay resolves `var(--x)` values against `:root` for accurate swatches.
+- **Content files** (`src/writer/data.ts`): JSON string values, YAML scalars and markdown frontmatter, matched exactly. Quoting is preserved and re-applied where YAML needs it.
+- **Expression paths**: when the located element renders `{dict.hero.title}` or `{t("hero.title")}`, the property path is compared with the object-key path of every tier-3 literal; a single match wins over the tier order.
+- **Plain HTML** (`src/static/`): `parse5` with source positions tags elements at serve time; text, attribute and class edits use the same positions. The static server resolves clean URLs (`/about` → `about.html` or `about/index.html`).
+
 ## Why these choices
 
 - **TypeScript everywhere.** Bundler loaders and Vite plugins are JavaScript by construction, Babel is the reference parser for JSX, and the user already has Node. A Go or Rust binary would add an install step and gain nothing: parsing one file takes milliseconds.

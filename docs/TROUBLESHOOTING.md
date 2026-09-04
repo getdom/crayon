@@ -48,3 +48,19 @@ Undo reverts Crayon's writes only, most recent first, for the current session. E
 ## Text with `&nbsp;`, `&amp;`, typographic quotes
 
 Entities are decoded on both sides before comparing, and the common French and English ones are covered. If a text with an unusual entity is refused as computed, open an issue with the JSX line.
+
+## The style bar does not show, or says "Styles live in the component"
+
+The bar needs Tailwind in the project. When the text you clicked is rendered by a component (`<Button>`), its classes live in that component's file; Crayon does not guess which one. Open the component and click a text inside it instead, or edit the class in your editor.
+
+## "This element's styles come from a CSS module"
+
+The `className` is `styles.something`, not Tailwind classes. Change the CSS rule in the module file.
+
+## Image replaced but the page still shows the old one
+
+Content files (frontmatter, JSON) are read at request time, so Crayon reloads the page after such a change. For imported assets Next needs a moment to rebuild the hashed URL; if it stays stale, reload.
+
+## Next 16: pages 404 or `proxy.ts` is skipped after adding Crayon
+
+Fixed in 0.2.0: the plugin used to add a `webpack` config next to the Turbopack rules. Update Crayon.

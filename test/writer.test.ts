@@ -138,6 +138,35 @@ describe("applyTextEdit", () => {
     expect(applyTextEdit(root, { oldText: "Voir", newText: "Lire" })).toMatchObject({ ok: false, reason: "dynamic" });
   });
 
+  it("replaces a word inside a JSX text node", () => {
+    file("a.tsx", `const a = <p>\n  Ship faster with\n  fewer meetings.\n</p>;`);
+    const r = applyTextEdit(root, {
+      file: "a.tsx",
+      line: 1,
+      column: 10,
+      oldText: "fewer meetings.",
+      newText: "no meetings.",
+    });
+    expect(r).toMatchObject({ ok: true, how: "located" });
+    expect(read("a.tsx")).toBe(`const a = <p>\n  Ship faster with\n  no meetings.\n</p>;`);
+  });
+
+  it("prefers the i18n dictionary entry matching the rendered expression path", () => {
+    file("messages/fr.ts", `export const fr = { hero: { title: "Arrêtez de courir", sub: "x" } };`);
+    file("og.tsx", `export default () => <h1>Arrêtez de courir</h1>;`);
+    file("landing.tsx", `export const L = ({ dict }) => <h1 className="x">{dict.hero.title}</h1>;`);
+    const r = applyTextEdit(root, {
+      file: "landing.tsx",
+      line: 1,
+      column: 31,
+      oldText: "Arrêtez de courir",
+      newText: "Respirez",
+    });
+    expect(r).toMatchObject({ ok: true, how: "matched", file: "messages/fr.ts" });
+    expect(read("messages/fr.ts")).toContain(`title: "Respirez"`);
+    expect(read("og.tsx")).toContain("Arrêtez de courir");
+  });
+
   it("refuses composite children", () => {
     file("a.tsx", `const a = <p>Hello <b>world</b></p>;`);
     const r = applyTextEdit(root, { file: "a.tsx", line: 1, column: 10, oldText: "Hello world", newText: "X" });

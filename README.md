@@ -32,7 +32,7 @@ npx crayon-dev
 
 ## What Crayon is
 
-- **A content editor, not a design tool.** Text today, images and Tailwind tokens next. Never drag-and-drop layout.
+- **A content editor, not a design tool.** Text, images, and the type and colour tokens of your Tailwind theme. Never drag-and-drop layout.
 - **Deterministic.** Every edit is a surgical AST rewrite of one literal. No LLM in the loop, no reformatting, no surprise diffs.
 - **Local.** One process on your machine. No account, no cloud, nothing leaves your computer.
 - **Safe to leave in place.** The one-line plugin does nothing unless the Crayon CLI started the dev server.
@@ -77,19 +77,34 @@ Every write is echoed in the terminal with the file and line:
 
 ## What it edits today
 
-- Text written between JSX tags: `<h1>Hello</h1>`, including multi-line text with indentation preserved.
-- Text passed through a component: `<Button>Book a call</Button>`, found by searching the project for that exact string.
-- Text passed as a prop: `<Field label="Surface">`, `<Card title="Pricing">`.
-- Text inside a JSX expression: `{isPro ? "Pro plan" : "Free plan"}`.
-- String literals elsewhere in the code (a `const items = [{ label: "Pricing" }]` array), when the text is unique.
+**Text**
 
-When the same text appears in several places, Crayon uses the DOM ancestors of the element you clicked to choose the occurrence in the right file, closest to that spot.
+- Written between JSX tags: `<h1>Hello</h1>`, including multi-line text with indentation preserved, or a single word inside a longer text.
+- Passed through a component: `<Button>Book a call</Button>`, found by searching the project for that exact string.
+- Passed as a prop: `<Field label="Surface">`, `<Card title="Pricing">`.
+- Inside a JSX expression: `{isPro ? "Pro plan" : "Free plan"}`.
+- In an i18n dictionary or a data file: `{dict.hero.title}` leads to `hero: { title: "…" }` in `messages/fr.ts`; `{post.title}` leads to the frontmatter of the right `.mdx`, or to a JSON or YAML value.
+
+When the same text appears in several places, Crayon uses the expression that renders it (`dict.hero.title`) and the DOM ancestors of the element you clicked to choose the right occurrence.
+
+**Images**
+
+- `<img src="/hero.png">` and `<Image src="/hero.png">`: the new file is written next to the current one in `public/`, `src` and `alt` are updated, `height` is fixed when the ratio changed.
+- Imported assets (`import hero from "./hero.png"`): the file is replaced on disk, the code does not move.
+- Paths stored in content files (frontmatter, JSON) are updated there.
+
+**Styles**, on Tailwind projects
+
+- Size, weight, italic, text colour and font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`.
+- The palette is read from your project: your theme's colours first (shadcn tokens, brand colours), then Tailwind's default palette. Fonts are the ones your theme declares.
+- Works inside `cn()` and `clsx()` calls. Refused, with the reason, when styles come from a CSS module or a variant function.
 
 When the text cannot be edited safely, Crayon says so instead of guessing:
 
 - **Computed or data-driven** text (`{price} €`, a CMS field, an i18n key) is refused with the file and line that renders it.
 - **Ambiguous** text lists the candidates.
 - **Composite** text such as `Hello <b>world</b>` is not editable as a whole yet. Click the inner piece instead.
+- **Dynamic image sources** (`src={logoUrl}`) name the file and line so you know where the value comes from.
 
 ## Supported setups
 
@@ -119,6 +134,8 @@ Package managers: npm, pnpm, yarn, bun. Crayon runs your existing `dev` script.
  Enter ───────► ws {file,line,col,old,new} ─► AST rewrite of one node ─► hero.tsx
                 HMR re-render ◄──────────────────────────────────────── file changed
 ```
+
+For a plain HTML folder there is no plugin: Crayon serves the files itself and tags elements from the HTML parser's positions.
 
 1. **The plugin** tags every host element (`div`, `p`, `img`...) with `data-crayon="src/app/page.tsx:42:6"` during development. It is a webpack and Turbopack loader for Next, a `transform` hook for Vite, running before SWC or esbuild. It only activates when the `CRAYON` environment variable is set, which the CLI does.
 2. **The CLI** runs your dev script, puts an HTTP proxy in front of it that injects the overlay into HTML responses and forwards HMR websockets untouched, and opens a second websocket for edits.
@@ -164,11 +181,10 @@ crayon [dir] [options]
 
 In order. Each step ships when it works on real sites, not before.
 
-1. **Images**: click an image, drop a file, it is copied to `public/` and `src` and `alt` are updated.
-2. **Tailwind tokens**: a small panel for colour, size, spacing and radius, editing the class string. Scale values only, no free CSS.
-3. **Plain HTML sites**: no plugin needed, positions come from the HTML parser.
-4. **Publish**: one button that commits and pushes, so a non-developer can ship a copy change.
-5. **Composite text**: editing `Hello <b>world</b>` as one unit.
+1. **Publish**: one button that commits and pushes, so a non-developer can ship a copy change.
+2. **Spacing and radius** in the style bar, on the Tailwind scale.
+3. **Composite text**: editing `Hello <b>world</b>` as one unit.
+4. **Background colours** and button variants.
 
 Not planned: drag-and-drop layout, component creation, anything that makes Crayon a design tool.
 
@@ -179,6 +195,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The short version:
 - **"This text is not written as-is in the code"**: the text is computed. The message names the file and line that renders it.
 - **Port 4400 busy**: Crayon picks the next free one and says so.
 - **Nothing is tagged (hover shows nothing)**: the config line is missing or the dev server was started without Crayon. Run `npx crayon-dev`, not `npm run dev`.
+- **The style bar is missing**: the project has no Tailwind, or the text is rendered by a component whose classes live elsewhere.
 
 ## Contributing
 

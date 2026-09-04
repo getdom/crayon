@@ -25,7 +25,7 @@ export interface EditResult {
 
 export interface EditFailure {
   ok: false;
-  reason: "not-found" | "dynamic" | "ambiguous" | "composite" | "unsupported";
+  reason: "not-found" | "dynamic" | "ambiguous" | "composite" | "unsupported" | string;
   message: string;
   candidates?: string[];
 }
@@ -41,6 +41,42 @@ interface TextSlot {
   quote?: string;
   /** 1 = JSX text, 2 = JSX attribute, 3 = any other string literal. Lower is more trustworthy. */
   tier?: 1 | 2 | 3;
+  /** For literals inside object literals: the chain of property keys, outermost first (e.g. ["hero", "title"]). */
+  keyPath?: string[];
+}
+
+/** Property keys of the object literals enclosing a node, outermost first. */
+function keyPathOf(ancestors: any[]): string[] {
+  const keys: string[] = [];
+  for (const a of ancestors) {
+    if (a.type === "ObjectProperty" && !a.computed) {
+      const k = a.key;
+      if (k.type === "Identifier") keys.unshift(k.name);
+      else if (k.type === "StringLiteral") keys.unshift(k.value);
+    }
+  }
+  return keys;
+}
+
+/**
+ * When an element renders a single expression like {dict.hero.title}, {t("hero.title")} or {item.label},
+ * the property path is a strong hint about where the text lives. Returns e.g. ["hero", "title"].
+ */
+function expressionPath(element: any): string[] | null {
+  const kids = (element.children ?? []).filter((c: any) => !(c.type === "JSXText" && c.value.trim() === ""));
+  if (kids.length !== 1 || kids[0].type !== "JSXExpressionContainer") return null;
+  let e = kids[0].expression;
+  if (e.type === "CallExpression" && e.arguments[0]?.type === "StringLiteral") return e.arguments[0].value.split(".");
+  const path: string[] = [];
+  while (
+    (e.type === "MemberExpression" || e.type === "OptionalMemberExpression") &&
+    !e.computed &&
+    e.property.type === "Identifier"
+  ) {
+    path.unshift(e.property.name);
+    e = e.object;
+  }
+  return path.length ? path : null;
 }
 
 /** Attributes whose values are never user-facing copy. */
@@ -122,6 +158,7 @@ function literalTier(node: any, parent: any, ancestors: any[]): 2 | 3 | null {
 
 import { listSourceFiles } from "./files.js";
 import { searchDataFiles, applyDataEdit } from "./data.js";
+import { findSubstring } from "./substring.js";
 
 /** The editable text slots directly inside a JSX element (no nested elements). */
 function textSlots(element: any, file: string): TextSlot[] | "composite" {
@@ -238,7 +275,11 @@ function searchText(root: string, text: string): TextSlot[] {
           for (const slot of slots) push({ ...slot, tier: 1 });
         } else if (node.type === "StringLiteral" || node.type === "TemplateLiteral") {
           const tier = literalTier(node, parent, ancestors);
-          if (tier) push(stringSlot(node, file, tier));
+          if (tier) {
+            const slot = stringSlot(node, file, tier);
+            if (slot && tier === 3) slot.keyPath = keyPathOf(ancestors);
+            push(slot);
+          }
         }
       },
       [],
@@ -272,6 +313,20 @@ function pickHits(root: string, hits: TextSlot[], ancestors: string[] = []): Tex
   return pool;
 }
 
+/** Replace a word or phrase inside a JSX text node, leaving the rest of the node untouched. */
+function writeSubstring(
+  root: string,
+  slot: TextSlot,
+  sub: { start: number; end: number },
+  newText: string,
+): EditResult {
+  const code = fs.readFileSync(slot.file, "utf8");
+  const s = new MagicString(code);
+  s.overwrite(slot.start + sub.start, slot.start + sub.end, encodeJsxText(newText.replace(/\r?\n/g, " ")));
+  fs.writeFileSync(slot.file, s.toString());
+  return { ok: true, file: path.relative(root, slot.file).split(path.sep).join("/"), line: slot.line, how: "located" };
+}
+
 function write(root: string, slot: TextSlot, newText: string, how: EditResult["how"]): EditResult {
   const code = fs.readFileSync(slot.file, "utf8");
   const s = new MagicString(code);
@@ -281,7 +336,7 @@ function write(root: string, slot: TextSlot, newText: string, how: EditResult["h
 }
 
 export type Located =
-  | { ok: true; slot: TextSlot; how: "located" | "matched" }
+  | { ok: true; slot: TextSlot; how: "located" | "matched"; sub?: { start: number; end: number } }
   | { ok: true; data: import("./data.js").DataHit; how: "data" };
 
 export function applyTextEdit(root: string, edit: TextEdit): EditResult | EditFailure {
@@ -296,6 +351,7 @@ export function applyTextEdit(root: string, edit: TextEdit): EditResult | EditFa
       how: "data",
     };
   }
+  if (located.sub) return writeSubstring(root, located.slot, located.sub, edit.newText);
   return write(root, located.slot, edit.newText, located.how);
 }
 
@@ -303,6 +359,7 @@ export function applyTextEdit(root: string, edit: TextEdit): EditResult | EditFa
 export function locateTextEdit(root: string, edit: TextEdit): Located | EditFailure {
   const oldText = normalize(edit.oldText);
   if (!oldText) return { ok: false, reason: "unsupported", message: "Empty text cannot be located." };
+  let exprPath: string[] | null = null;
 
   if (edit.file && edit.line != null && edit.column != null) {
     const abs = path.resolve(root, edit.file);
@@ -316,6 +373,7 @@ export function locateTextEdit(root: string, edit: TextEdit): Located | EditFail
       } catch {}
       const element = ast && findElementAt(ast, edit.line, edit.column);
       if (element) {
+        exprPath = expressionPath(element);
         const slots = textSlots(element, abs);
         if (slots !== "composite") {
           const exact = slots.find((s) => normalize(s.rendered) === oldText);
@@ -323,12 +381,21 @@ export function locateTextEdit(root: string, edit: TextEdit): Located | EditFail
           if (slots.length === 1 && normalize(slots.map((s) => s.rendered).join("")) === oldText) {
             return { ok: true, slot: slots[0], how: "located" };
           }
+          if (slots.length === 1 && slots[0].kind === "jsxtext") {
+            const sub = findSubstring(slots[0].raw, edit.oldText);
+            if (sub) return { ok: true, slot: slots[0], how: "located", sub };
+          }
         }
       }
     }
   }
 
-  const hits = pickHits(root, searchText(root, oldText), edit.ancestors);
+  const all = searchText(root, oldText);
+  if (exprPath) {
+    const byPath = all.filter((h) => h.keyPath && endsWith(h.keyPath, exprPath));
+    if (byPath.length === 1) return { ok: true, slot: byPath[0], how: "matched" };
+  }
+  const hits = pickHits(root, all, edit.ancestors);
   if (hits.length === 1) return { ok: true, slot: hits[0], how: "matched" };
   if (hits.length > 1) {
     return {
@@ -354,4 +421,9 @@ export function locateTextEdit(root: string, edit: TextEdit): Located | EditFail
     reason: "dynamic",
     message: `This text is not written as-is in the code${where}. It is probably computed, or comes from data or a CMS.`,
   };
+}
+
+function endsWith(keyPath: string[], tail: string[]): boolean {
+  if (tail.length > keyPath.length) return false;
+  return tail.every((k, i) => keyPath[keyPath.length - tail.length + i] === k);
 }

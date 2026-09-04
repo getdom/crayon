@@ -27,8 +27,20 @@ const main = defineCommand({
     console.log(`${pc.bold("✎ Crayon")} ${pc.dim("·")} ${pc.cyan(project.framework)} ${pc.dim("·")} ${pc.dim(root)}`);
 
     if (project.framework === "static") {
-      console.log(pc.yellow("Plain HTML sites are next on the list. For now Crayon works on Next and Vite projects."));
-      process.exit(1);
+      const session = new EditSession(root, true);
+      const port = Number(args.port);
+      const { server, port: actualPort } = await startProxy({ port, root, session });
+      const url = `http://localhost:${actualPort}`;
+      console.log("");
+      console.log(`  ${pc.bold(pc.green("Crayon ready"))}  ${pc.underline(url)}  ${pc.dim("serving this folder")}`);
+      console.log(pc.dim("  Click any text on the page to edit it. Enter saves, Esc cancels. Ctrl+C stops."));
+      console.log("");
+      if (args.open) await open(url).catch(() => {});
+      process.on("SIGINT", () => {
+        server.close();
+        process.exit(0);
+      });
+      return;
     }
     if (project.framework === "unknown" || project.devCommand.length === 0) {
       console.log(pc.red("No Next or Vite project found here (no dependency and no dev script)."));
@@ -52,7 +64,7 @@ const main = defineCommand({
     let server: import("node:http").Server;
     let actualPort = port;
     try {
-      ({ server, port: actualPort } = await startProxy({ target: dev.target, port, session }));
+      ({ server, port: actualPort } = await startProxy({ target: dev.target, port, root, session }));
     } catch (err: any) {
       console.log(pc.red(`Could not listen on port ${port}: ${err.message}`));
       dev.stop();

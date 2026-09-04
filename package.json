@@ -1,6 +1,6 @@
 {
   "name": "crayon-dev",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Edit your site on the rendered page, write straight to the code. Works on Next, Vite and plain HTML.",
   "keywords": [
     "visual-editor",
@@ -70,6 +70,7 @@
     "http-proxy": "^1.18.1",
     "magic-string": "^0.30.17",
     "open": "^10.1.2",
+    "parse5": "^7.3.0",
     "picocolors": "^1.1.1",
     "ws": "^8.18.3"
   },
@@ -78,9 +79,10 @@
     "@types/http-proxy": "^1.17.16",
     "@types/node": "^24.0.0",
     "@types/ws": "^8.18.1",
+    "prettier": "^3.6.2",
+    "puppeteer-core": "^24.43.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "prettier": "^3.6.2"
+    "vitest": "^3.2.4"
   }
 }

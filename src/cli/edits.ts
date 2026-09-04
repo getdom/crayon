@@ -3,6 +3,10 @@ import path from "node:path";
 import pc from "picocolors";
 import { applyTextEdit, type EditResult, type EditFailure, type TextEdit } from "../writer/index.js";
 import { replaceImage, setAlt, type ImageRequest, type FileSnapshot } from "./images.js";
+import { applyClassEdit, type ClassEdit } from "../writer/classes.js";
+import { applyHtmlTextEdit, applyHtmlClassEdit } from "../static/html.js";
+
+const isHtml = (file?: string) => !!file && file.toLowerCase().endsWith(".html");
 
 interface HistoryEntry {
   label: string;
@@ -11,12 +15,18 @@ interface HistoryEntry {
 
 export class EditSession {
   private history: HistoryEntry[] = [];
-  constructor(private root: string) {}
+  constructor(
+    private root: string,
+    /** Plain HTML site: no framework, files are edited directly. */
+    private isStatic: boolean = false,
+  ) {}
 
   text(edit: TextEdit): EditResult | EditFailure {
     // Snapshot every file that could be touched: the located one, and we re-derive after for text-search fallbacks.
     const before = edit.file ? this.snap(path.resolve(this.root, edit.file)) : null;
-    const result = applyTextEdit(this.root, edit);
+    const result = (
+      isHtml(edit.file) || this.isStatic ? applyHtmlTextEdit(this.root, edit) : applyTextEdit(this.root, edit)
+    ) as EditResult | EditFailure;
     if (result.ok) {
       const abs = path.resolve(this.root, result.file);
       const snapshot = before && before.path === abs ? before : this.rebuild(abs, edit);
@@ -44,6 +54,21 @@ export class EditSession {
     }
     const { snapshots: _s, ...rest } = result as any;
     return rest;
+  }
+
+  classes(edit: ClassEdit) {
+    const abs = edit.file ? path.resolve(this.root, edit.file) : null;
+    const before = abs ? this.snap(abs) : null;
+    const result = isHtml(edit.file) ? applyHtmlClassEdit(this.root, edit) : applyClassEdit(this.root, edit);
+    if (result.ok) {
+      if (before) this.history.push({ label: `${result.file}:${result.line}`, snapshots: [before] });
+      console.log(
+        `${pc.green("🎨")} ${pc.bold(result.file)}:${result.line}  ${edit.remove.length ? pc.dim("−" + edit.remove.join(" ")) + " " : ""}${edit.add.length ? "+" + edit.add.join(" ") : ""}${result.missing.length ? pc.yellow("  not found: " + result.missing.join(" ")) : ""}`,
+      );
+    } else {
+      console.log(`${pc.red("✗")} ${result.message}`);
+    }
+    return result;
   }
 
   undo(): { ok: boolean; label?: string } {

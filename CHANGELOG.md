@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-04
+
+### Added
+
+- Images: click an image to replace it from a file, a drop or a URL, and edit its alt text. Files go next to the current one in `public/`; imported assets are replaced in place; `height` is corrected when the ratio changes. Drop a file straight onto an image.
+- Style bar on Tailwind projects: size, weight, italic, text colour, font family. Palette and fonts are read from the project (Tailwind 4 `@theme` and `theme.css`, Tailwind 3 `tailwindcss/colors` and config). Works inside `cn()`/`clsx()`.
+- Plain HTML sites: `npx crayon-dev` in a folder with `index.html` serves it with the overlay, no plugin needed.
+- Content files as a search tier: JSON values, YAML, and markdown frontmatter, for text and image paths.
+- Expression-path matching: `{dict.hero.title}` finds `hero: { title }` in the i18n dictionary rather than a same-looking literal elsewhere.
+- Word-level edits inside a longer text, for sites that split sentences into spans.
+- `scripts/demo.mjs` records the README demo with Puppeteer.
+
+### Fixed
+
+- Next 16: the plugin no longer adds a `webpack` config when Turbopack is in use, which broke `proxy.ts` on some projects.
+- Editing an element containing non-breaking spaces no longer produces a spurious write.
+- The toolbar no longer shifts when its status text changes.
+
 ## [0.1.0] - 2026-09-04
 
 First release.

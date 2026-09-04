@@ -47,6 +47,39 @@ kbd { font: 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #717
 }
 .box.editing .tag { background: #f59e0b; color: #1c1917; }
 .box.flip .tag { top: auto; bottom: -22px; border-radius: 0 0 4px 4px; }
+.style {
+  position: fixed; z-index: 2147483646; display: none; align-items: center; gap: 4px;
+  height: 34px; padding: 0 6px; background: #16161a; color: #f4f4f5; border-radius: 999px;
+  font: 500 12px/1 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25); white-space: nowrap;
+}
+.style.open { display: flex; }
+.style select {
+  all: unset; height: 24px; padding: 0 8px; border-radius: 999px; background: #26262c; color: #f4f4f5;
+  font: 12px -apple-system, BlinkMacSystemFont, "Inter", sans-serif; cursor: pointer; max-width: 110px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.style select:hover { background: #303038; }
+.style .tog { width: 26px; padding: 0; justify-content: center; font-weight: 700; }
+.style .tog.on { background: #f4f4f5; color: #16161a; }
+.style .tog.i { font-style: italic; font-family: Georgia, serif; }
+.style .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); display: inline-block; }
+.style .muted { color: #a1a1aa; font-weight: 400; padding: 0 8px; }
+.swatches {
+  position: fixed; z-index: 2147483646; display: none; width: 300px; max-height: 300px; overflow: auto; padding: 10px;
+  background: #16161a; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.35);
+  font: 11px -apple-system, BlinkMacSystemFont, "Inter", sans-serif; color: #a1a1aa;
+}
+.swatches.open { display: block; }
+.swatches h4 { margin: 8px 0 6px; font: 600 10.5px -apple-system, BlinkMacSystemFont, "Inter", sans-serif; color: #71717a; text-transform: uppercase; letter-spacing: .06em; }
+.swatches h4:first-child { margin-top: 0; }
+.swatches .grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.swatches .named { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatches button.c { all: unset; cursor: pointer; width: 22px; height: 22px; border-radius: 6px; border: 1.5px solid rgba(255,255,255,.12); box-sizing: border-box; }
+.swatches button.c:hover, .swatches button.c.on { border-color: #fff; outline: 2px solid rgba(255,255,255,.35); }
+.swatches button.n { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 4px; border-radius: 999px; background: #26262c; color: #e4e4e7; }
+.swatches button.n:hover, .swatches button.n.on { background: #3f3f46; }
+.swatches button.n i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.3); }
 .panel {
   position: fixed; z-index: 2147483646; width: 340px; padding: 12px;
   background: #16161a; color: #f4f4f5; border-radius: 12px;
@@ -89,6 +122,17 @@ class Overlay {
   undoBtn = document.createElement("button");
 
   panel = document.createElement("div");
+  styleBar = document.createElement("div");
+  swatches = document.createElement("div");
+  theme: {
+    tailwind: 3 | 4 | null;
+    projectColors: Record<string, string>;
+    paletteColors: Record<string, string>;
+    fonts: Record<string, string>;
+  } | null = null;
+  /** Class changes staged while editing; written on commit. */
+  staged = { remove: new Set<string>(), add: new Set<string>() };
+  stagedStyle: Record<string, string> = {};
   panelImg: HTMLImageElement | null = null;
   panelFile: { name: string; data: string } | null = null;
   ws: WebSocket | null = null;
@@ -130,7 +174,13 @@ class Overlay {
     this.tag.className = "tag";
     this.box.append(this.tag);
     this.panel.className = "panel";
-    this.root.append(this.bar, this.box, this.panel);
+    this.styleBar.className = "style";
+    this.swatches.className = "swatches";
+    this.root.append(this.bar, this.box, this.panel, this.styleBar, this.swatches);
+    fetch("/__crayon/theme")
+      .then((r) => r.json())
+      .then((t) => (this.theme = t))
+      .catch(() => {});
     document.documentElement.append(this.host);
     document.addEventListener("dragover", this.onDragOver, true);
     document.addEventListener("drop", this.onDrop, true);
@@ -296,6 +346,7 @@ class Overlay {
     this.box.style.height = `${r.height}px`;
     this.box.classList.toggle("editing", !!this.editing);
     this.box.classList.toggle("flip", r.top < 60);
+    if (this.editing && this.styleBar.classList.contains("open")) this.placeStyleBar(this.editing);
     const loc = this.locatorOf(el);
     const name = el.tagName.toLowerCase();
     const where = loc ? `${name} · ${loc.file.split("/").pop()}:${loc.line}` : name;
@@ -385,13 +436,22 @@ class Overlay {
     el.addEventListener("blur", this.onBlur);
     this.say("Enter to save · Esc to cancel");
     this.redraw();
+    this.openStyleBar(el);
   }
 
   redrawSoon = () => requestAnimationFrame(() => this.redraw());
 
   onBlur = () => {
-    // A click elsewhere commits through onClick; blur from tab switches commits too.
-    if (this.editing) this.commitEdit();
+    // Focus moving into the style bar must not commit; a click elsewhere commits through onClick.
+    window.setTimeout(() => {
+      if (!this.editing) return;
+      const active = this.root.activeElement;
+      if (active && this.host.contains(this.host) && this.styleBar.contains(active)) {
+        return;
+      }
+      if (this.swatches.classList.contains("open")) return;
+      this.commitEdit();
+    }, 0);
   };
 
   finishEdit() {
@@ -403,6 +463,10 @@ class Overlay {
     el.removeAttribute("contenteditable");
     el.removeAttribute("spellcheck");
     window.getSelection()?.removeAllRanges();
+    for (const k of Object.keys(this.stagedStyle)) el.style.removeProperty(k);
+    this.stagedStyle = {};
+    this.styleBar.classList.remove("open");
+    this.swatches.classList.remove("open");
     this.editing = null;
     this.redraw();
   }
@@ -411,6 +475,9 @@ class Overlay {
     const el = this.editing;
     if (!el) return;
     el.textContent = this.editingOld;
+    for (const t of this.staged.add) el.classList.remove(t);
+    for (const t of this.staged.remove) el.classList.add(t);
+    this.staged = { remove: new Set(), add: new Set() };
     this.finishEdit();
     this.say("Cancelled");
   }
@@ -422,27 +489,322 @@ class Overlay {
     const oldText = this.editingOld;
     const locator = this.editingLocator;
     const ancestors = this.editingAncestors;
+    const ownLocator = this.locatorOf(el);
+    const isOwn = el.hasAttribute(ATTR);
+    const staged = this.staged;
+    this.staged = { remove: new Set(), add: new Set() };
     this.finishEdit();
-    if (newText.trim() === oldText.trim()) {
+    const collapse = (t: string) => t.replace(/[\s\u00a0]+/g, " ").trim();
+    const textChanged = collapse(newText) !== collapse(oldText);
+    const classChanged = staged.add.size > 0 || staged.remove.size > 0;
+    if (!textChanged && !classChanged) {
       this.say("No change");
       return;
     }
-    if (newText.trim() === "") {
+    if (textChanged && newText.trim() === "") {
       el.textContent = oldText;
       this.say("Empty text is not saved. Delete the element in code if you need to.", "err");
       return;
     }
     this.say("Saving…");
-    const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
-    if (r.ok) {
-      this.say(
-        `✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : r.how === "data" ? " (content file)" : ""}`,
-        "ok",
-      );
-    } else {
-      el.textContent = oldText;
-      this.say(`✗ ${r.message}`, "err", 8000);
+    const notes: string[] = [];
+    if (textChanged) {
+      const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
+      if (r.ok)
+        notes.push(
+          `✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : r.how === "data" ? " (content file)" : ""}`,
+        );
+      else {
+        el.textContent = oldText;
+        notes.push(`✗ ${r.message}`);
+      }
     }
+    if (classChanged) {
+      const r = await this.send({
+        type: "class",
+        ...(isOwn ? ownLocator : {}),
+        remove: [...staged.remove],
+        add: [...staged.add],
+      });
+      if (r.ok)
+        notes.push(`✓ styles ${r.file}:${r.line}${r.missing?.length ? " · not found: " + r.missing.join(" ") : ""}`);
+      else {
+        for (const t of staged.add) el.classList.remove(t);
+        for (const t of staged.remove) el.classList.add(t);
+        notes.push(`✗ ${r.message}`);
+      }
+    }
+    const failed = notes.some((n) => n.startsWith("✗"));
+    this.say(notes.join("  "), failed ? "err" : "ok", failed ? 9000 : 4000);
+  }
+
+  /* ---------- style bar ---------- */
+  static SIZES = ["xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl"];
+  static SIZE_CSS: Record<string, string> = {
+    xs: ".75rem",
+    sm: ".875rem",
+    base: "1rem",
+    lg: "1.125rem",
+    xl: "1.25rem",
+    "2xl": "1.5rem",
+    "3xl": "1.875rem",
+    "4xl": "2.25rem",
+    "5xl": "3rem",
+    "6xl": "3.75rem",
+  };
+  static WEIGHTS = ["thin", "extralight", "light", "normal", "medium", "semibold", "bold", "extrabold", "black"];
+  static WEIGHT_CSS: Record<string, string> = {
+    thin: "100",
+    extralight: "200",
+    light: "300",
+    normal: "400",
+    medium: "500",
+    semibold: "600",
+    bold: "700",
+    extrabold: "800",
+    black: "900",
+  };
+  static SIZE_RE = /^text-(xs|sm|base|lg|xl|\d+xl)$/;
+  static WEIGHT_RE = /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/;
+
+  colorValue(name: string): string {
+    const t = this.theme!;
+    const raw = t.projectColors[name] ?? t.paletteColors[name] ?? "";
+    const root = getComputedStyle(document.documentElement);
+    const fromVar = root.getPropertyValue(`--color-${name}`).trim();
+    if (fromVar && !fromVar.startsWith("var(")) return fromVar;
+    const m = /^var\((--[\w-]+)\)$/.exec(raw);
+    if (m) {
+      const v = root.getPropertyValue(m[1]).trim();
+      if (v) return v;
+    }
+    return raw;
+  }
+
+  fontValue(name: string): string {
+    const raw = this.theme!.fonts[name] ?? "";
+    const root = getComputedStyle(document.documentElement);
+    const fromVar = root.getPropertyValue(`--font-${name}`).trim();
+    if (fromVar && !fromVar.startsWith("var(")) return fromVar;
+    const m = /^var\((--[\w-]+)\)$/.exec(raw);
+    if (m) return root.getPropertyValue(m[1]).trim() || raw;
+    return raw;
+  }
+
+  /** Stage a token swap: remove tokens matching `pattern`, add `token`, preview with an inline style. */
+  swap(el: HTMLElement, pattern: RegExp, token: string | null, cssProp?: string, cssValue?: string) {
+    for (const cls of [...el.classList]) {
+      if (pattern.test(cls) && cls !== token) {
+        el.classList.remove(cls);
+        if (this.staged.add.has(cls)) this.staged.add.delete(cls);
+        else this.staged.remove.add(cls);
+      }
+    }
+    if (token && !el.classList.contains(token)) {
+      el.classList.add(token);
+      if (this.staged.remove.has(token)) this.staged.remove.delete(token);
+      else this.staged.add.add(token);
+    }
+    if (cssProp) {
+      if (cssValue) {
+        el.style.setProperty(cssProp, cssValue);
+        this.stagedStyle[cssProp] = cssValue;
+      } else {
+        el.style.removeProperty(cssProp);
+        delete this.stagedStyle[cssProp];
+      }
+    }
+    this.redraw();
+  }
+
+  colorNames(): string[] {
+    const t = this.theme!;
+    return [...Object.keys(t.projectColors), ...Object.keys(t.paletteColors)];
+  }
+
+  colorRe(): RegExp {
+    return new RegExp(
+      "^text-(" +
+        this.colorNames()
+          .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+          .join("|") +
+        ")(/\\d+)?$",
+    );
+  }
+
+  openStyleBar(el: HTMLElement) {
+    const t = this.theme;
+    if (!t || !t.tailwind) return;
+    const bar = this.styleBar;
+    bar.innerHTML = "";
+    if (!el.hasAttribute(ATTR)) {
+      const note = document.createElement("span");
+      note.className = "muted";
+      note.textContent = "Styles live in the component that renders this text";
+      bar.append(note);
+      bar.classList.add("open");
+      this.placeStyleBar(el);
+      return;
+    }
+    const classes = [...el.classList];
+    const colorNames = new Set(this.colorNames());
+    const fontNames = Object.keys(t.fonts);
+    const cur = {
+      size: classes.find((c) => Overlay.SIZE_RE.test(c))?.slice(5) ?? "",
+      weight: classes.find((c) => Overlay.WEIGHT_RE.test(c))?.slice(5) ?? "",
+      italic: classes.includes("italic"),
+      color: classes.find((c) => c.startsWith("text-") && colorNames.has(c.slice(5).split("/")[0]))?.slice(5) ?? "",
+      font: classes.find((c) => c.startsWith("font-") && fontNames.includes(c.slice(5)))?.slice(5) ?? "",
+    };
+    const select = (
+      label: string,
+      options: string[],
+      value: string,
+      onChange: (v: string) => void,
+      render?: (o: HTMLOptionElement, v: string) => void,
+    ) => {
+      const sel = document.createElement("select");
+      sel.title = label;
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = label;
+      sel.append(empty);
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        render?.(opt, o);
+        sel.append(opt);
+      }
+      sel.value = value;
+      sel.addEventListener("change", () => onChange(sel.value));
+      return sel;
+    };
+    bar.append(
+      select("Size", Overlay.SIZES, cur.size, (v) =>
+        this.swap(el, Overlay.SIZE_RE, v ? `text-${v}` : null, "font-size", v ? Overlay.SIZE_CSS[v] : ""),
+      ),
+      select("Weight", Overlay.WEIGHTS, cur.weight, (v) =>
+        this.swap(el, Overlay.WEIGHT_RE, v ? `font-${v}` : null, "font-weight", v ? Overlay.WEIGHT_CSS[v] : ""),
+      ),
+    );
+    const italic = document.createElement("button");
+    italic.className = "tog i" + (cur.italic ? " on" : "");
+    italic.textContent = "I";
+    italic.title = "Italic";
+    italic.addEventListener("click", () => {
+      const on = !italic.classList.contains("on");
+      italic.classList.toggle("on", on);
+      this.swap(el, /^(italic|not-italic)$/, on ? "italic" : null, "font-style", on ? "italic" : "");
+    });
+    const color = document.createElement("button");
+    const dot = document.createElement("span");
+    dot.className = "swatch";
+    dot.style.background = getComputedStyle(el).color;
+    color.append(dot, document.createTextNode(cur.color || "Color"));
+    color.title = "Text colour";
+    color.addEventListener("click", () =>
+      this.toggleSwatches(el, cur.color, (name) => {
+        color.replaceChildren(dot, document.createTextNode(name));
+        dot.style.background = this.colorValue(name);
+      }),
+    );
+    bar.append(italic, color);
+    if (fontNames.length > 1) {
+      bar.append(
+        select(
+          "Font",
+          fontNames,
+          cur.font,
+          (v) =>
+            this.swap(
+              el,
+              new RegExp(`^font-(${fontNames.join("|")})$`),
+              v ? `font-${v}` : null,
+              "font-family",
+              v ? this.fontValue(v) : "",
+            ),
+          (opt, v) => (opt.style.fontFamily = this.fontValue(v)),
+        ),
+      );
+    }
+    for (const b of bar.querySelectorAll("button")) b.addEventListener("mousedown", (e) => e.preventDefault());
+    bar.classList.add("open");
+    this.placeStyleBar(el);
+  }
+
+  placeStyleBar(el: Element) {
+    const r = el.getBoundingClientRect();
+    const bar = this.styleBar;
+    const below = r.bottom + 8 + 34 < window.innerHeight;
+    bar.style.top = `${below ? r.bottom + 8 : Math.max(60, r.top - 42)}px`;
+    bar.style.left = `${Math.min(Math.max(8, r.left), window.innerWidth - bar.offsetWidth - 8)}px`;
+  }
+
+  toggleSwatches(el: HTMLElement, current: string, onPick: (name: string) => void) {
+    const sw = this.swatches;
+    if (sw.classList.contains("open")) {
+      sw.classList.remove("open");
+      return;
+    }
+    const t = this.theme!;
+    sw.innerHTML = "";
+    const pick = (name: string) => {
+      this.swap(el, this.colorRe(), `text-${name}`, "color", this.colorValue(name));
+      onPick(name);
+      sw.classList.remove("open");
+    };
+    const projectNames = Object.keys(t.projectColors).filter(
+      (n) =>
+        (!/^(background|border|input|ring|card|popover|sidebar|chart)/.test(n) && !n.endsWith("-foreground")) ||
+        /^(foreground|muted-foreground|accent-foreground)$/.test(n),
+    );
+    if (projectNames.length) {
+      const h = document.createElement("h4");
+      h.textContent = "Your theme";
+      const named = document.createElement("div");
+      named.className = "named";
+      for (const name of projectNames) {
+        const b = document.createElement("button");
+        b.className = "n" + (name === current ? " on" : "");
+        const i = document.createElement("i");
+        i.style.background = this.colorValue(name);
+        b.append(i, document.createTextNode(name));
+        b.addEventListener("click", () => pick(name));
+        named.append(b);
+      }
+      sw.append(h, named);
+    }
+    const hues = new Map<string, string[]>();
+    for (const name of Object.keys(t.paletteColors)) {
+      const m = /^([a-z]+)-(\d+)$/.exec(name);
+      if (!m) continue;
+      if (!hues.has(m[1])) hues.set(m[1], []);
+      hues.get(m[1])!.push(name);
+    }
+    if (hues.size) {
+      const h = document.createElement("h4");
+      h.textContent = "Palette";
+      sw.append(h);
+      for (const [, names] of hues) {
+        const row = document.createElement("div");
+        row.className = "grid";
+        for (const name of names.filter((n) => /-(100|200|300|400|500|600|700|800|900|950)$/.test(n))) {
+          const b = document.createElement("button");
+          b.className = "c" + (name === current ? " on" : "");
+          b.title = name;
+          b.style.background = this.colorValue(name);
+          b.addEventListener("click", () => pick(name));
+          row.append(b);
+        }
+        sw.append(row);
+      }
+    }
+    for (const b of sw.querySelectorAll("button")) b.addEventListener("mousedown", (e) => e.preventDefault());
+    const r = this.styleBar.getBoundingClientRect();
+    sw.style.top = `${r.bottom + 6}px`;
+    sw.style.left = `${Math.min(r.left, window.innerWidth - 316)}px`;
+    sw.classList.add("open");
   }
 
   /* ---------- images ---------- */

@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url";
 import httpProxy from "http-proxy";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { EditSession } from "./edits.js";
+import { readTheme, type Theme } from "./theme.js";
+import { serveStatic } from "../static/server.js";
 
 const OVERLAY_PATH = "/__crayon/overlay.js";
+const THEME_PATH = "/__crayon/theme";
 const WS_PATH = "/__crayon/ws";
 
 function overlaySource(): string {
@@ -37,8 +40,10 @@ function decode(buf: Buffer, encoding?: string): Buffer {
 }
 
 export interface ProxyOptions {
-  target: string;
+  /** Dev server to proxy. When absent, the project root is served as a static site. */
+  target?: string;
   port: number;
+  root: string;
   session: EditSession;
   onClient?: (count: number) => void;
 }
@@ -69,7 +74,13 @@ function listen(server: http.Server, port: number, attempts = 20): Promise<numbe
 
 export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
   const overlay = overlaySource();
-  const proxy = httpProxy.createProxyServer({ target: opts.target, ws: true, selfHandleResponse: true, xfwd: false });
+  const staticHandler = opts.target ? null : serveStatic(opts.root, inject);
+  const proxy = httpProxy.createProxyServer({
+    target: opts.target ?? "http://127.0.0.1:1",
+    ws: true,
+    selfHandleResponse: true,
+    xfwd: false,
+  });
 
   proxy.on("proxyReq", (proxyReq) => {
     proxyReq.removeHeader("accept-encoding");
@@ -108,13 +119,21 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
     }
   });
 
+  let theme: Theme | null = null;
   const server = http.createServer((req, res) => {
+    if (req.url === THEME_PATH) {
+      theme ??= readTheme(opts.root);
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      res.end(JSON.stringify(theme));
+      return;
+    }
     if (req.url === OVERLAY_PATH) {
       res.writeHead(200, { "content-type": "application/javascript", "cache-control": "no-store" });
       res.end(overlay);
       return;
     }
-    proxy.web(req, res);
+    if (staticHandler) staticHandler(req, res);
+    else proxy.web(req, res);
   });
 
   const wss = new WebSocketServer({ noServer: true });
@@ -160,6 +179,15 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           .then((result) =>
             ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size })),
           );
+      } else if (msg.type === "class") {
+        const result = opts.session.classes({
+          file: msg.file,
+          line: msg.line,
+          column: msg.column,
+          remove: Array.isArray(msg.remove) ? msg.remove.map(String) : [],
+          add: Array.isArray(msg.add) ? msg.add.map(String) : [],
+        });
+        ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size }));
       } else if (msg.type === "undo") {
         const r = opts.session.undo();
         ws.send(JSON.stringify({ type: "undone", ...r, history: opts.session.size }));
@@ -172,6 +200,8 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
   server.on("upgrade", (req, socket, head) => {
     if (req.url === WS_PATH) {
       wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    } else if (staticHandler) {
+      socket.destroy();
     } else {
       proxy.ws(req, socket, head);
     }
