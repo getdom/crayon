@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/demo.gif" alt="Crayon: click a headline on the page, type, press Enter, the source file is updated" width="800">
+  <img src="docs/hero.jpg" alt="Crayon" width="900">
 </p>
 
 <h1 align="center">Crayon</h1>
@@ -25,6 +25,10 @@ Crayon is the other way: open the site, click the text, type, press Enter. The J
 cd my-site
 npx crayon-dev
 ```
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Click a headline on the page, type, press Enter: the source file is updated" width="800">
+</p>
 
 ## What Crayon is
 
