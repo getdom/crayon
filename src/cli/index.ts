@@ -46,16 +46,18 @@ const main = defineCommand({
 
     const session = new EditSession(root);
     const port = Number(args.port);
-    let server;
+    let server: import("node:http").Server;
+    let actualPort = port;
     try {
-      server = await startProxy({ target: dev.target, port, session });
+      ({ server, port: actualPort } = await startProxy({ target: dev.target, port, session }));
     } catch (err: any) {
       console.log(pc.red(`Could not listen on port ${port}: ${err.message}`));
       dev.stop();
       process.exit(1);
     }
+    if (actualPort !== port) console.log(pc.yellow(`Port ${port} is busy, using ${actualPort}.`));
 
-    const url = `http://localhost:${port}`;
+    const url = `http://localhost:${actualPort}`;
     console.log("");
     console.log(`  ${pc.bold(pc.green("Crayon ready"))}  ${pc.underline(url)}  ${pc.dim(`→ ${dev.target}`)}`);
     console.log(pc.dim("  Click any text on the page to edit it. Enter saves, Esc cancels. Ctrl+C stops."));

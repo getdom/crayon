@@ -39,7 +39,31 @@ export interface ProxyOptions {
   onClient?: (count: number) => void;
 }
 
-export function startProxy(opts: ProxyOptions): Promise<http.Server> {
+export interface ProxyHandle {
+  server: http.Server;
+  port: number;
+}
+
+/** Listen on the requested port, or the next free one within a small range. */
+function listen(server: http.Server, port: number, attempts = 20): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const tryPort = (p: number, left: number) => {
+      const onError = (err: NodeJS.ErrnoException) => {
+        server.removeListener("error", onError);
+        if (err.code === "EADDRINUSE" && left > 0) tryPort(p + 1, left - 1);
+        else reject(err);
+      };
+      server.once("error", onError);
+      server.listen(p, "127.0.0.1", () => {
+        server.removeListener("error", onError);
+        resolve(p);
+      });
+    };
+    tryPort(port, attempts);
+  });
+}
+
+export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
   const overlay = overlaySource();
   const proxy = httpProxy.createProxyServer({ target: opts.target, ws: true, selfHandleResponse: true, xfwd: false });
 
@@ -125,8 +149,5 @@ export function startProxy(opts: ProxyOptions): Promise<http.Server> {
     }
   });
 
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, "127.0.0.1", () => resolve(server));
-  });
+  return listen(server, opts.port).then((port) => ({ server, port }));
 }

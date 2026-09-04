@@ -9,6 +9,7 @@
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js", "require": "./dist/next.cjs" },
     "./vite": { "types": "./dist/vite.d.ts", "import": "./dist/vite.js" },
+    "./package.json": "./package.json",
     "./loader": { "require": "./dist/loader.cjs", "import": "./dist/loader.cjs", "default": "./dist/loader.cjs" }
   },
   "files": ["dist", "README.md"],

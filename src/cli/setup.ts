@@ -16,7 +16,7 @@ function ownPackageRoot(): string {
 
 export function isInstalled(project: Project): boolean {
   try {
-    createRequire(path.join(project.root, "package.json")).resolve(`${PKG}/package.json`);
+    createRequire(path.join(project.root, "package.json")).resolve(`${PKG}/next`);
     return true;
   } catch {
     return false;
