@@ -1,8 +1,54 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { execa } from "execa";
 import pc from "picocolors";
 import type { Project } from "./detect.js";
+
+const PKG = "crayon-dev";
+
+/** Where this CLI's own package lives (dist/cli.js → package root). */
+function ownPackageRoot(): string {
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+}
+
+export function isInstalled(project: Project): boolean {
+  try {
+    createRequire(path.join(project.root, "package.json")).resolve(`${PKG}/package.json`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Make `crayon-dev/next` resolvable from the project. When the CLI runs from a local checkout
+ * (not from node_modules) we symlink it; otherwise we add it as a dev dependency.
+ */
+export async function install(project: Project): Promise<boolean> {
+  const own = ownPackageRoot();
+  const target = path.join(project.root, "node_modules", PKG);
+  if (!own.includes(`${path.sep}node_modules${path.sep}`)) {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    try {
+      fs.rmSync(target, { recursive: true, force: true });
+    } catch {}
+    fs.symlinkSync(own, target, "dir");
+    console.log(pc.green(`✓ linked ${PKG}`) + pc.dim(` → ${own}`));
+    return true;
+  }
+  const cmd = { npm: ["npm", "install", "-D", PKG], pnpm: ["pnpm", "add", "-D", PKG], yarn: ["yarn", "add", "-D", PKG], bun: ["bun", "add", "-d", PKG] }[project.pm];
+  console.log(pc.dim(`$ ${cmd.join(" ")}`));
+  const r = await execa(cmd[0], cmd.slice(1), { cwd: project.root, stdio: "inherit", reject: false });
+  if (r.exitCode !== 0) {
+    console.log(pc.red(`Could not install ${PKG}.`));
+    return false;
+  }
+  console.log(pc.green(`✓ ${PKG} added as a dev dependency`));
+  return true;
+}
 
 export function isConfigured(project: Project): boolean {
   if (!project.configFile) return false;
@@ -57,17 +103,20 @@ export function patchConfig(project: Project): boolean {
 
 export async function ensureConfigured(project: Project, autoSetup: boolean): Promise<boolean> {
   if (project.framework !== "next" && project.framework !== "vite") return true;
-  if (isConfigured(project)) return true;
+  const installed = isInstalled(project);
+  const configured = isConfigured(project);
+  if (installed && configured) return true;
   if (!project.configFile) {
     console.log(pc.yellow(`No ${project.framework} config file found.`));
     console.log(manualInstructions(project));
     return false;
   }
   const rel = path.relative(project.root, project.configFile);
+  const needs = [!installed && `${PKG} as a dev dependency`, !configured && `one line in ${pc.bold(rel)}`].filter(Boolean).join(" and ");
   let yes = autoSetup;
   if (!yes) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const answer = await rl.question(`${pc.bold("Crayon")} needs one line in ${pc.bold(rel)}. Add it now? ${pc.dim("[Y/n] ")}`);
+    const answer = await rl.question(`${pc.bold("Crayon")} needs ${needs}. Set it up now? ${pc.dim("[Y/n] ")}`);
     rl.close();
     yes = answer.trim() === "" || /^y/i.test(answer);
   }
@@ -75,6 +124,8 @@ export async function ensureConfigured(project: Project, autoSetup: boolean): Pr
     console.log(manualInstructions(project));
     return false;
   }
+  if (!installed && !(await install(project))) return false;
+  if (configured) return true;
   if (patchConfig(project)) {
     console.log(pc.green(`✓ ${rel} updated`) + pc.dim(" (inert without Crayon, safe to commit)"));
     return true;
