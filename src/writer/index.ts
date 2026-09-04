@@ -19,8 +19,8 @@ export interface EditResult {
   ok: true;
   file: string;
   line: number;
-  /** "located" = found at the data-crayon position, "matched" = found by unique text search. */
-  how: "located" | "matched";
+  /** "located" = at the data-crayon position, "matched" = unique text search in code, "data" = a JSON/YAML/frontmatter value. */
+  how: "located" | "matched" | "data";
 }
 
 export interface EditFailure {
@@ -120,8 +120,8 @@ function literalTier(node: any, parent: any, ancestors: any[]): 2 | 3 | null {
   return 3;
 }
 
-const SOURCE_EXT = new Set([".tsx", ".jsx", ".ts", ".js", ".mjs", ".mdx"]);
-const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "dist", "build", "out", ".turbo", ".vercel", "coverage"]);
+import { listSourceFiles } from "./files.js";
+import { searchDataFiles, applyDataEdit } from "./data.js";
 
 /** The editable text slots directly inside a JSX element (no nested elements). */
 function textSlots(element: any, file: string): TextSlot[] | "composite" {
@@ -208,30 +208,6 @@ function findElementAt(ast: any, line: number, column: number): any | null {
   return found;
 }
 
-function listSourceFiles(root: string): string[] {
-  const out: string[] = [];
-  const visit = (dir: string, depth: number) => {
-    if (depth > 8) return;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith(".") && entry.name !== ".") continue;
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) visit(full, depth + 1);
-      } else if (SOURCE_EXT.has(path.extname(entry.name)) && !entry.name.endsWith(".d.ts")) {
-        out.push(full);
-      }
-    }
-  };
-  visit(root, 0);
-  return out;
-}
-
 /** Every text slot in the project whose rendered value equals `text`, grouped by tier. */
 function searchText(root: string, text: string): TextSlot[] {
   const target = normalize(text);
@@ -304,11 +280,22 @@ function write(root: string, slot: TextSlot, newText: string, how: EditResult["h
   return { ok: true, file: path.relative(root, slot.file).split(path.sep).join("/"), line: slot.line, how };
 }
 
-export type Located = { ok: true; slot: TextSlot; how: EditResult["how"] };
+export type Located =
+  | { ok: true; slot: TextSlot; how: "located" | "matched" }
+  | { ok: true; data: import("./data.js").DataHit; how: "data" };
 
 export function applyTextEdit(root: string, edit: TextEdit): EditResult | EditFailure {
   const located = locateTextEdit(root, edit);
   if (!located.ok) return located;
+  if (located.how === "data") {
+    applyDataEdit(located.data, edit.newText.replace(/\r?\n/g, " "));
+    return {
+      ok: true,
+      file: path.relative(root, located.data.file).split(path.sep).join("/"),
+      line: located.data.line,
+      how: "data",
+    };
+  }
   return write(root, located.slot, edit.newText, located.how);
 }
 
@@ -349,6 +336,16 @@ export function locateTextEdit(root: string, edit: TextEdit): Located | EditFail
       reason: "ambiguous",
       message: `This text appears ${hits.length} times in the code.`,
       candidates: hits.map((h) => `${path.relative(root, h.file)}:${h.line}`),
+    };
+  }
+  const data = searchDataFiles(root, edit.oldText.trim());
+  if (data.length === 1) return { ok: true, data: data[0], how: "data" };
+  if (data.length > 1) {
+    return {
+      ok: false,
+      reason: "ambiguous",
+      message: `This text appears ${data.length} times in content files.`,
+      candidates: data.map((h) => `${path.relative(root, h.file)}:${h.line}`),
     };
   }
   const where = edit.file && edit.line ? ` (rendered by ${edit.file.split("/").pop()}:${edit.line})` : "";

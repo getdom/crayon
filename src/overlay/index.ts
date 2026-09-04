@@ -47,6 +47,34 @@ kbd { font: 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #717
 }
 .box.editing .tag { background: #f59e0b; color: #1c1917; }
 .box.flip .tag { top: auto; bottom: -22px; border-radius: 0 0 4px 4px; }
+.panel {
+  position: fixed; z-index: 2147483646; width: 340px; padding: 12px;
+  background: #16161a; color: #f4f4f5; border-radius: 12px;
+  font: 400 12.5px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 32px rgba(0,0,0,.3);
+  display: none; flex-direction: column; gap: 10px;
+}
+.panel.open { display: flex; }
+.panel .head { display: flex; align-items: center; gap: 10px; }
+.panel .thumb { width: 44px; height: 44px; border-radius: 6px; object-fit: contain; background: repeating-conic-gradient(#2a2a30 0 25%, #1c1c21 0 50%) 0 0 / 12px 12px; flex-shrink: 0; }
+.panel .meta { min-width: 0; }
+.panel .meta b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel .meta span { color: #a1a1aa; font-size: 11.5px; }
+.panel .drop {
+  border: 1.5px dashed rgba(255,255,255,.22); border-radius: 8px; padding: 14px 10px; text-align: center;
+  color: #d4d4d8; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.panel .drop:hover, .panel .drop.over { border-color: #a5b4fc; background: rgba(99,102,241,.12); }
+.panel .drop.chosen { border-style: solid; border-color: #22c55e; color: #bbf7d0; }
+.panel label { display: flex; flex-direction: column; gap: 4px; color: #a1a1aa; font-size: 11.5px; }
+.panel input[type=text], .panel input[type=url] {
+  all: unset; box-sizing: border-box; width: 100%; height: 28px; padding: 0 8px; border-radius: 6px;
+  background: #26262c; color: #f4f4f5; font: 12.5px -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+}
+.panel input:focus { outline: 1.5px solid #6366f1; }
+.panel .row { display: flex; gap: 8px; }
+.panel .row > * { flex: 1; }
+.panel .actions { display: flex; justify-content: flex-end; gap: 6px; }
 `;
 
 class Overlay {
@@ -60,6 +88,9 @@ class Overlay {
   toggleBtn = document.createElement("button");
   undoBtn = document.createElement("button");
 
+  panel = document.createElement("div");
+  panelImg: HTMLImageElement | null = null;
+  panelFile: { name: string; data: string } | null = null;
   ws: WebSocket | null = null;
   enabled = true;
   hovered: Element | null = null;
@@ -98,8 +129,11 @@ class Overlay {
     this.box.className = "box";
     this.tag.className = "tag";
     this.box.append(this.tag);
-    this.root.append(this.bar, this.box);
+    this.panel.className = "panel";
+    this.root.append(this.bar, this.box, this.panel);
     document.documentElement.append(this.host);
+    document.addEventListener("dragover", this.onDragOver, true);
+    document.addEventListener("drop", this.onDrop, true);
 
     document.addEventListener("mousemove", this.onMove, true);
     document.addEventListener("mouseleave", () => this.hover(null), true);
@@ -281,9 +315,19 @@ class Overlay {
     }
     e.preventDefault();
     e.stopPropagation();
+    if (this.panel.classList.contains("open")) {
+      this.closePanel();
+      return;
+    }
     const target = e.target as Element;
-    if (target instanceof HTMLImageElement || target.tagName === "svg") {
-      this.say("Images are coming in the next version", "err");
+    const img =
+      target instanceof HTMLImageElement ? target : (target.querySelector?.("img") as HTMLImageElement | null);
+    if (img && (target === img || (target.childElementCount === 1 && target.firstElementChild === img))) {
+      this.openImagePanel(img);
+      return;
+    }
+    if (target.tagName === "svg" || target.closest("svg")) {
+      this.say("Inline SVG icons are code, not images. Change them in your editor.", "err");
       return;
     }
     const el = this.pickEditable(target, e.clientX, e.clientY);
@@ -298,6 +342,11 @@ class Overlay {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
       e.preventDefault();
       this.setEnabled(!this.enabled);
+      return;
+    }
+    if (e.key === "Escape" && this.panel.classList.contains("open")) {
+      e.preventDefault();
+      this.closePanel();
       return;
     }
     if (!this.editing) return;
@@ -386,12 +435,162 @@ class Overlay {
     this.say("Saving…");
     const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
     if (r.ok) {
-      this.say(`✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : ""}`, "ok");
+      this.say(
+        `✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : r.how === "data" ? " (content file)" : ""}`,
+        "ok",
+      );
     } else {
       el.textContent = oldText;
       this.say(`✗ ${r.message}`, "err", 8000);
     }
   }
+
+  /* ---------- images ---------- */
+  openImagePanel(img: HTMLImageElement) {
+    this.panelImg = img;
+    this.panelFile = null;
+    this.hovered = img;
+    this.redraw();
+    const src = img.getAttribute("src") ?? "";
+    const alt = img.getAttribute("alt") ?? "";
+    const shown =
+      decodeURIComponent(/[?&]url=([^&]+)/.exec(src)?.[1] ?? src)
+        .split("/")
+        .pop()
+        ?.split("?")[0] ?? src;
+    const dims = img.naturalWidth ? `${img.naturalWidth} × ${img.naturalHeight}` : "";
+    this.panel.innerHTML = `
+      <div class="head">
+        <img class="thumb" src="${img.currentSrc || src}" alt="">
+        <div class="meta"><b title="${src.replace(/"/g, "&quot;")}">${shown}</b><span>${dims}</span></div>
+      </div>
+      <div class="drop">Drop an image here, or click to choose a file</div>
+      <div class="row"><input type="url" placeholder="…or paste an image URL"></div>
+      <label>Alt text<input type="text" value="${alt.replace(/"/g, "&quot;")}"></label>
+      <div class="actions"><button class="cancel">Cancel</button><button class="primary save">Save</button></div>`;
+    const drop = this.panel.querySelector(".drop") as HTMLElement;
+    const url = this.panel.querySelector("input[type=url]") as HTMLInputElement;
+    const altInput = this.panel.querySelector("input[type=text]") as HTMLInputElement;
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = "image/*";
+    picker.addEventListener("change", () => picker.files?.[0] && this.pickFile(picker.files[0], drop));
+    drop.addEventListener("click", () => picker.click());
+    drop.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      drop.classList.add("over");
+    });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      const f = e.dataTransfer?.files?.[0];
+      if (f) this.pickFile(f, drop);
+    });
+    this.panel.querySelector(".cancel")!.addEventListener("click", () => this.closePanel());
+    this.panel
+      .querySelector(".save")!
+      .addEventListener("click", () => this.saveImage(url.value.trim(), altInput.value, alt));
+    altInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") this.saveImage(url.value.trim(), altInput.value, alt);
+    });
+    this.panel.classList.add("open");
+    const r = img.getBoundingClientRect();
+    const top = r.bottom + 8 + 260 < window.innerHeight ? r.bottom + 8 : Math.max(12, r.top - 8 - 260);
+    this.panel.style.top = `${top}px`;
+    this.panel.style.left = `${Math.min(Math.max(12, r.left), window.innerWidth - 352)}px`;
+  }
+
+  pickFile(file: File, drop: HTMLElement) {
+    if (!file.type.startsWith("image/")) {
+      this.say("That is not an image file.", "err");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result).split(",")[1] ?? "";
+      this.panelFile = { name: file.name, data };
+      drop.textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+      drop.classList.add("chosen");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  closePanel() {
+    this.panel.classList.remove("open");
+    this.panel.innerHTML = "";
+    this.panelImg = null;
+    this.panelFile = null;
+    this.hovered = null;
+    this.redraw();
+  }
+
+  async saveImage(url: string, alt: string, currentAlt: string) {
+    const img = this.panelImg;
+    if (!img) return;
+    const file = this.panelFile;
+    const altChanged = alt !== currentAlt;
+    if (!file && !url && !altChanged) {
+      this.closePanel();
+      this.say("No change");
+      return;
+    }
+    const msg: any = {
+      type: "image",
+      ...(this.locatorOf(img) ?? {}),
+      ancestors: this.ancestorsOf(img),
+      src: img.getAttribute("src") ?? "",
+      currentAlt,
+      alt: altChanged ? alt : undefined,
+    };
+    if (file) Object.assign(msg, { name: file.name, data: file.data });
+    else if (url) msg.url = url;
+    this.closePanel();
+    this.say("Saving image…");
+    const r = await this.send(msg);
+    if (r.ok) {
+      if (altChanged) img.alt = alt;
+      this.say(`✓ ${r.file}${r.line ? ":" + r.line : ""}${r.note ? " · " + r.note : ""}`, "ok", r.note ? 8000 : 4000);
+      if (r.reload) window.setTimeout(() => location.reload(), 600);
+    } else {
+      this.say(`✗ ${r.message}`, "err", 8000);
+    }
+  }
+
+  onDragOver = (e: DragEvent) => {
+    if (!this.enabled || this.isOurs(e.target)) return;
+    if (e.target instanceof HTMLImageElement && e.dataTransfer?.types.includes("Files")) {
+      e.preventDefault();
+      this.hover(e.target);
+    }
+  };
+
+  onDrop = (e: DragEvent) => {
+    if (!this.enabled || this.isOurs(e.target)) return;
+    const img = e.target instanceof HTMLImageElement ? e.target : null;
+    const f = e.dataTransfer?.files?.[0];
+    if (!img || !f) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const data = String(reader.result).split(",")[1] ?? "";
+      this.say("Saving image…");
+      const r = await this.send({
+        type: "image",
+        ...(this.locatorOf(img) ?? {}),
+        ancestors: this.ancestorsOf(img),
+        src: img.getAttribute("src") ?? "",
+        name: f.name,
+        data,
+      });
+      if (r.ok) {
+        this.say(`✓ ${r.file}${r.line ? ":" + r.line : ""}${r.note ? " · " + r.note : ""}`, "ok", r.note ? 8000 : 4000);
+        if (r.reload) window.setTimeout(() => location.reload(), 600);
+      } else this.say(`✗ ${r.message}`, "err", 8000);
+    };
+    reader.readAsDataURL(f);
+  };
 
   async undo() {
     this.cancelEdit();

@@ -143,6 +143,23 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           newText: msg.newText,
         });
         ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size }));
+      } else if (msg.type === "image") {
+        opts.session
+          .image({
+            file: msg.file,
+            line: msg.line,
+            column: msg.column,
+            ancestors: Array.isArray(msg.ancestors) ? msg.ancestors.slice(0, 40) : [],
+            src: String(msg.src ?? ""),
+            name: msg.name,
+            data: msg.data,
+            url: msg.url,
+            alt: msg.alt,
+            currentAlt: msg.currentAlt,
+          })
+          .then((result) =>
+            ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size })),
+          );
       } else if (msg.type === "undo") {
         const r = opts.session.undo();
         ws.send(JSON.stringify({ type: "undone", ...r, history: opts.session.size }));
