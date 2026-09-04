@@ -1,0 +1,43 @@
+{
+  "name": "crayon-dev",
+  "version": "0.1.0",
+  "description": "Edit your site on the rendered page, write straight to the code. Works on Next, Vite and plain HTML.",
+  "license": "MIT",
+  "type": "module",
+  "bin": { "crayon": "./dist/cli.js" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js", "require": "./dist/next.cjs" },
+    "./vite": { "types": "./dist/vite.d.ts", "import": "./dist/vite.js" },
+    "./loader": { "require": "./dist/loader.cjs", "import": "./dist/loader.cjs", "default": "./dist/loader.cjs" }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["visual-editor", "next", "vite", "react", "tailwind", "dev-tools", "inline-editing"],
+  "repository": { "type": "git", "url": "https://github.com/getdom/crayon" },
+  "dependencies": {
+    "@babel/parser": "^7.28.0",
+    "citty": "^0.1.6",
+    "execa": "^9.6.0",
+    "http-proxy": "^1.18.1",
+    "magic-string": "^0.30.17",
+    "open": "^10.1.2",
+    "picocolors": "^1.1.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.28.0",
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": { "node": ">=20" }
+}
