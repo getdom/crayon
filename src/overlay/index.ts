@@ -249,7 +249,8 @@ class Overlay {
     this.box.classList.toggle("flip", r.top < 60);
     const loc = this.locatorOf(el);
     const name = el.tagName.toLowerCase();
-    this.tag.textContent = loc ? `${name} · ${loc.file.split("/").pop()}:${loc.line}` : name;
+    const where = loc ? `${name} · ${loc.file.split("/").pop()}:${loc.line}` : name;
+    this.tag.textContent = this.editing ? `${where}   ↵ Enter to save · Esc to cancel` : where;
   }
 
   /* ---------- editing ---------- */
