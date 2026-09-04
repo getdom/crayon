@@ -2,25 +2,67 @@
   "name": "crayon-dev",
   "version": "0.1.0",
   "description": "Edit your site on the rendered page, write straight to the code. Works on Next, Vite and plain HTML.",
-  "license": "MIT",
-  "type": "module",
-  "bin": { "crayon": "./dist/cli.js" },
-  "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
-    "./next": { "types": "./dist/next.d.ts", "import": "./dist/next.js", "require": "./dist/next.cjs" },
-    "./vite": { "types": "./dist/vite.d.ts", "import": "./dist/vite.js" },
-    "./package.json": "./package.json",
-    "./loader": { "require": "./dist/loader.cjs", "import": "./dist/loader.cjs", "default": "./dist/loader.cjs" }
+  "keywords": [
+    "visual-editor",
+    "next",
+    "vite",
+    "react",
+    "tailwind",
+    "dev-tools",
+    "inline-editing"
+  ],
+  "homepage": "https://github.com/getdom/crayon#readme",
+  "bugs": {
+    "url": "https://github.com/getdom/crayon/issues"
   },
-  "files": ["dist", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/getdom/crayon"
+  },
+  "license": "MIT",
+  "author": "Dominique Giancani <dom@fabriquestudio.fr>",
+  "type": "module",
+  "bin": {
+    "crayon": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js",
+      "require": "./dist/next.cjs"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./package.json": "./package.json",
+    "./loader": {
+      "require": "./dist/loader.cjs",
+      "import": "./dist/loader.cjs",
+      "default": "./dist/loader.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
-  "keywords": ["visual-editor", "next", "vite", "react", "tailwind", "dev-tools", "inline-editing"],
-  "repository": { "type": "git", "url": "https://github.com/getdom/crayon" },
   "dependencies": {
     "@babel/parser": "^7.28.0",
     "citty": "^0.1.6",
@@ -38,7 +80,7 @@
     "@types/ws": "^8.18.1",
     "tsup": "^8.5.0",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
-  },
-  "engines": { "node": ">=20" }
+    "vitest": "^3.2.4",
+    "prettier": "^3.6.2"
+  }
 }

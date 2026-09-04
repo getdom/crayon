@@ -1,0 +1,23 @@
+name: Feature request
+description: Something Crayon should edit, or a setup it should support
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Crayon edits content: text now, images and Tailwind tokens next, then plain HTML and a publish button. Layout and design features are out of scope.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to change on your site?
+    validations:
+      required: true
+  - type: textarea
+    id: code
+    attributes:
+      label: What does the code look like?
+      render: tsx
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How should it behave?

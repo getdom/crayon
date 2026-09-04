@@ -25,10 +25,29 @@ export function renderJsxText(raw: string): string {
 }
 
 const ENTITIES: Record<string, string> = {
-  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
-  copy: "©", reg: "®", trade: "™", hellip: "…", mdash: "—", ndash: "–",
-  laquo: "«", raquo: "»", eacute: "é", egrave: "è", agrave: "à", ccedil: "ç",
-  rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", euro: "€",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  hellip: "…",
+  mdash: "—",
+  ndash: "–",
+  laquo: "«",
+  raquo: "»",
+  eacute: "é",
+  egrave: "è",
+  agrave: "à",
+  ccedil: "ç",
+  rsquo: "’",
+  lsquo: "‘",
+  rdquo: "”",
+  ldquo: "“",
+  euro: "€",
 };
 
 export function decodeEntities(text: string): string {

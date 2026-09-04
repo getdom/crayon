@@ -13,16 +13,27 @@ export class EditSession {
   private history: Snapshot[] = [];
   constructor(private root: string) {}
 
-  text(edit: { file?: string; line?: number; column?: number; ancestors?: string[]; oldText: string; newText: string }): EditResult | EditFailure {
+  text(edit: {
+    file?: string;
+    line?: number;
+    column?: number;
+    ancestors?: string[];
+    oldText: string;
+    newText: string;
+  }): EditResult | EditFailure {
     const before = this.snapshotFor(edit.file);
     const result = applyTextEdit(this.root, edit);
     if (result.ok) {
       const abs = path.resolve(this.root, result.file);
       const previous = before?.file === abs ? before.before : this.readSafe(abs, edit, result);
       if (previous != null) this.history.push({ file: abs, before: previous, label: `${result.file}:${result.line}` });
-      console.log(`${pc.green("✎")} ${pc.bold(result.file)}:${result.line}  ${pc.dim(JSON.stringify(edit.oldText))} → ${JSON.stringify(edit.newText)}${result.how === "matched" ? pc.dim("  (found by text)") : ""}`);
+      console.log(
+        `${pc.green("✎")} ${pc.bold(result.file)}:${result.line}  ${pc.dim(JSON.stringify(edit.oldText))} → ${JSON.stringify(edit.newText)}${result.how === "matched" ? pc.dim("  (found by text)") : ""}`,
+      );
     } else {
-      console.log(`${pc.red("✗")} ${result.message}${result.candidates ? pc.dim(" " + result.candidates.join(", ")) : ""}`);
+      console.log(
+        `${pc.red("✗")} ${result.message}${result.candidates ? pc.dim(" " + result.candidates.join(", ")) : ""}`,
+      );
     }
     return result;
   }

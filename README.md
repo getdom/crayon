@@ -1,61 +1,185 @@
-# Crayon
+<p align="center">
+  <img src="docs/demo.gif" alt="Crayon: click a headline on the page, type, press Enter, the source file is updated" width="800">
+</p>
 
-Edit your site on the rendered page. Crayon writes the change straight into your code.
+<h1 align="center">Crayon</h1>
 
-Built for sites that came out of Lovable, v0, Bolt, Cursor or Claude Code: changing a headline should not require another prompt, a two-minute rebuild and a regression.
+<p align="center">
+  Edit your site on the rendered page. Crayon writes the change straight into your code.<br>
+  <sub>Next.js · Vite · React · zero config to keep</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/getdom/crayon/actions/workflows/ci.yml"><img src="https://github.com/getdom/crayon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/crayon-dev"><img src="https://img.shields.io/npm/v/crayon-dev.svg" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT"></a>
+</p>
+
+---
+
+You built a site with Lovable, v0, Bolt, Cursor or Claude Code. Now a headline needs a comma. Prompting the AI again means two minutes, a rebuild, and a chance it touches something else.
+
+Crayon is the other way: open the site, click the text, type, press Enter. The JSX literal is replaced in the right file. Nothing else in the file moves.
 
 ```bash
-cd my-next-site
+cd my-site
 npx crayon-dev
 ```
 
-Crayon starts your dev server, opens the site with a thin toolbar, and every piece of text becomes editable in place. Press Enter, the source file is updated. Nothing else in the file moves.
+## What Crayon is
 
-## What it does today
+- **A content editor, not a design tool.** Text today, images and Tailwind tokens next. Never drag-and-drop layout.
+- **Deterministic.** Every edit is a surgical AST rewrite of one literal. No LLM in the loop, no reformatting, no surprise diffs.
+- **Local.** One process on your machine. No account, no cloud, nothing leaves your computer.
+- **Safe to leave in place.** The one-line plugin does nothing unless the Crayon CLI started the dev server.
 
-- **Next.js** (webpack and Turbopack) and **Vite** projects, React 18 and 19, server and client components.
-- Click any text, type, Enter. The JSX literal is replaced in the right file, with indentation and formatting untouched.
-- Text that reaches the DOM through a component (`<Button>Book now</Button>`) is found by a unique text search across the project.
-- Undo from the toolbar.
-- Clear messages when the text cannot be edited safely: it comes from data, props or a CMS, or it appears several times.
+## Quick start
 
-## What it does not do yet
+```bash
+cd my-next-or-vite-site
+npx crayon-dev
+```
 
-Images, Tailwind tokens (colour, size, spacing), plain HTML sites, and a Publish button that commits and pushes. That is the roadmap, in that order. Crayon will never do drag-and-drop layout.
+First run:
+
+```
+✎ Crayon · next · /Users/you/my-site
+Crayon needs crayon-dev as a dev dependency and one line in next.config.ts. Set it up now? [Y/n]
+✓ crayon-dev added as a dev dependency
+✓ next.config.ts updated (inert without Crayon, safe to commit)
+Starting npm run dev …
+
+  Crayon ready  http://localhost:4400  → http://localhost:3000
+  Click any text on the page to edit it. Enter saves, Esc cancels. Ctrl+C stops.
+```
+
+Your browser opens on the Crayon window, which is your site with a thin toolbar. Click any text.
+
+| Action               | Effect                                        |
+| -------------------- | --------------------------------------------- |
+| Click a text         | Edit it in place                              |
+| Enter                | Save to the source file                       |
+| Esc                  | Cancel                                        |
+| Click elsewhere      | Save                                          |
+| ⌘E / Ctrl+E          | Toggle between editing and browsing the site  |
+| Undo (toolbar)       | Revert the last write                         |
+| ⌘-click / Ctrl-click | Click through to the site while editing is on |
+
+Every write is echoed in the terminal with the file and line:
+
+```
+✎ src/components/hero.tsx:42  "Book a demo" → "Book a call"
+```
+
+## What it edits today
+
+- Text written between JSX tags: `<h1>Hello</h1>`, including multi-line text with indentation preserved.
+- Text passed through a component: `<Button>Book a call</Button>`, found by searching the project for that exact string.
+- Text passed as a prop: `<Field label="Surface">`, `<Card title="Pricing">`.
+- Text inside a JSX expression: `{isPro ? "Pro plan" : "Free plan"}`.
+- String literals elsewhere in the code (a `const items = [{ label: "Pricing" }]` array), when the text is unique.
+
+When the same text appears in several places, Crayon uses the DOM ancestors of the element you clicked to choose the occurrence in the right file, closest to that spot.
+
+When the text cannot be edited safely, Crayon says so instead of guessing:
+
+- **Computed or data-driven** text (`{price} €`, a CMS field, an i18n key) is refused with the file and line that renders it.
+- **Ambiguous** text lists the candidates.
+- **Composite** text such as `Hello <b>world</b>` is not editable as a whole yet. Click the inner piece instead.
+
+## Supported setups
+
+|                                                  | Status                                         |
+| ------------------------------------------------ | ---------------------------------------------- |
+| Next.js 16 with Turbopack                        | Tested                                         |
+| Next.js 15.3+ with webpack                       | Supported, same loader                         |
+| Next.js App Router, server and client components | Tested                                         |
+| Vite + React                                     | Supported, plugin written, looking for reports |
+| React 18 and 19                                  | Both                                           |
+| TypeScript and JavaScript                        | Both, `.tsx` and `.jsx`                        |
+| Plain HTML sites                                 | Not yet, see roadmap                           |
+
+Package managers: npm, pnpm, yarn, bun. Crayon runs your existing `dev` script.
 
 ## How it works
 
-1. A one-line plugin in your `next.config` or `vite.config` tags every host element with `data-crayon="file:line:column"` in development. The plugin is inert unless the Crayon CLI started the dev server, so it is safe to commit.
-2. The CLI runs your usual `dev` script, puts a proxy in front of it that injects the overlay, and listens for edits over a websocket.
-3. Each edit is applied with a surgical AST rewrite (Babel parser + magic-string): the matching text node is replaced, the rest of the file is byte-for-byte identical. Your dev server's HMR does the rest.
+```
+ you            browser                    crayon CLI                  your project
+ ───            ───────                    ──────────                  ────────────
+ npx crayon-dev ─────────────────────────► detect framework
+                                           add one line to config ───► next.config.ts
+                                           spawn `npm run dev` ──────► dev server :3000
+                                           proxy :4400 ◄──────────────  html + hmr
+                open :4400 ◄────────────── inject overlay script
+ click text ──► contentEditable
+ Enter ───────► ws {file,line,col,old,new} ─► AST rewrite of one node ─► hero.tsx
+                HMR re-render ◄──────────────────────────────────────── file changed
+```
+
+1. **The plugin** tags every host element (`div`, `p`, `img`...) with `data-crayon="src/app/page.tsx:42:6"` during development. It is a webpack and Turbopack loader for Next, a `transform` hook for Vite, running before SWC or esbuild. It only activates when the `CRAYON` environment variable is set, which the CLI does.
+2. **The CLI** runs your dev script, puts an HTTP proxy in front of it that injects the overlay into HTML responses and forwards HMR websockets untouched, and opens a second websocket for edits.
+3. **The writer** parses the file with Babel, finds the JSX element at the tagged position, and replaces the matching text node with `magic-string`. Bytes outside that node are untouched. If the text is not there (it came through a component), it searches the project for the literal.
+
+Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Configuration
+
+The CLI adds this for you. If you prefer to do it by hand:
 
 ```ts
 // next.config.ts
 import { withCrayon } from "crayon-dev/next";
-export default withCrayon(nextConfig);
 
+const nextConfig = {/* ... */};
+export default withCrayon(nextConfig);
+```
+
+```ts
 // vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import { crayon } from "crayon-dev/vite";
+
 export default defineConfig({ plugins: [react(), crayon()] });
 ```
 
-The CLI offers to add that line for you on first run.
+Both are no-ops without the CLI. Your `npm run dev` and your production build are unchanged.
 
-## Options
+## CLI options
 
 ```
-npx crayon-dev [dir] [--port 4400] [--no-open] [--setup]
+crayon [dir] [options]
+
+  dir            Project directory (default: current)
+  --port <n>     Port of the Crayon window (default: 4400, falls back to the next free port)
+  --no-open      Do not open the browser
+  --setup        Install the dependency and patch the config without asking
 ```
 
-`--setup` patches the framework config without asking. `⌘E` in the page toggles between editing and browsing.
+## Roadmap
 
-## Development
+In order. Each step ships when it works on real sites, not before.
 
-```bash
-npm install
-npm test
-npm run build
-node dist/cli.js ../some-next-project
-```
+1. **Images**: click an image, drop a file, it is copied to `public/` and `src` and `alt` are updated.
+2. **Tailwind tokens**: a small panel for colour, size, spacing and radius, editing the class string. Scale values only, no free CSS.
+3. **Plain HTML sites**: no plugin needed, positions come from the HTML parser.
+4. **Publish**: one button that commits and pushes, so a non-developer can ship a copy change.
+5. **Composite text**: editing `Hello <b>world</b>` as one unit.
 
-MIT.
+Not planned: drag-and-drop layout, component creation, anything that makes Crayon a design tool.
+
+## Troubleshooting
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The short version:
+
+- **"This text is not written as-is in the code"**: the text is computed. The message names the file and line that renders it.
+- **Port 4400 busy**: Crayon picks the next free one and says so.
+- **Nothing is tagged (hover shows nothing)**: the config line is missing or the dev server was started without Crayon. Run `npx crayon-dev`, not `npm run dev`.
+
+## Contributing
+
+Bug reports with a minimal repro are the most useful thing right now, especially on Vite projects and older Next versions. See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup and the layout of the code.
+
+## License
+
+[MIT](LICENSE)

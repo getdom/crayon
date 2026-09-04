@@ -44,17 +44,37 @@ interface TextSlot {
 }
 
 /** Attributes whose values are never user-facing copy. */
-const NON_COPY_ATTRS = /^(className|class|id|key|href|src|srcSet|type|name|style|role|htmlFor|rel|target|method|action|for|lang|dir|sizes|media|as|variant|size|color|mode|align|side|orientation|value|defaultValue|data-.*|on[A-Z].*)$/;
+const NON_COPY_ATTRS =
+  /^(className|class|id|key|href|src|srcSet|type|name|style|role|htmlFor|rel|target|method|action|for|lang|dir|sizes|media|as|variant|size|color|mode|align|side|orientation|value|defaultValue|data-.*|on[A-Z].*)$/;
 
 function stringSlot(node: any, file: string, tier: 1 | 2 | 3): TextSlot | null {
   if (node.type === "StringLiteral") {
     if (node.value.trim() === "") return null;
-    return { file, line: node.loc.start.line, start: node.start, end: node.end, kind: "string", rendered: node.value, raw: node.extra?.raw ?? "", quote: (node.extra?.raw ?? '"')[0], tier };
+    return {
+      file,
+      line: node.loc.start.line,
+      start: node.start,
+      end: node.end,
+      kind: "string",
+      rendered: node.value,
+      raw: node.extra?.raw ?? "",
+      quote: (node.extra?.raw ?? '"')[0],
+      tier,
+    };
   }
   if (node.type === "TemplateLiteral" && node.expressions.length === 0) {
     const v = node.quasis[0].value.cooked ?? "";
     if (v.trim() === "") return null;
-    return { file, line: node.loc.start.line, start: node.start, end: node.end, kind: "template", rendered: v, raw: node.quasis[0].value.raw, tier };
+    return {
+      file,
+      line: node.loc.start.line,
+      start: node.start,
+      end: node.end,
+      kind: "template",
+      rendered: v,
+      raw: node.quasis[0].value.raw,
+      tier,
+    };
   }
   return null;
 }
@@ -64,14 +84,30 @@ function literalTier(node: any, parent: any, ancestors: any[]): 2 | 3 | null {
   if (!parent) return 3;
   const t = parent.type as string;
   if (t.startsWith("TS")) return null;
-  if (t === "ImportDeclaration" || t === "ExportNamedDeclaration" || t === "ExportAllDeclaration" || t === "ImportExpression") return null;
+  if (
+    t === "ImportDeclaration" ||
+    t === "ExportNamedDeclaration" ||
+    t === "ExportAllDeclaration" ||
+    t === "ImportExpression"
+  )
+    return null;
   if (t === "JSXExpressionContainer") return null; // handled as tier 1 through textSlots
   if (t === "JSXAttribute") {
     const name = parent.name?.name ?? parent.name?.name?.name ?? "";
     return NON_COPY_ATTRS.test(String(name)) ? null : 2;
   }
-  if ((t === "ObjectProperty" || t === "ClassProperty" || t === "ObjectMethod") && parent.key === node && !parent.computed) return null;
-  if (t === "CallExpression" && parent.callee?.type === "Identifier" && /^(require|cn|clsx|cva|classNames|twMerge|tv)$/.test(parent.callee.name)) return null;
+  if (
+    (t === "ObjectProperty" || t === "ClassProperty" || t === "ObjectMethod") &&
+    parent.key === node &&
+    !parent.computed
+  )
+    return null;
+  if (
+    t === "CallExpression" &&
+    parent.callee?.type === "Identifier" &&
+    /^(require|cn|clsx|cva|classNames|twMerge|tv)$/.test(parent.callee.name)
+  )
+    return null;
   if (t === "Directive" || t === "DirectiveLiteral") return null;
   if (t === "MemberExpression" && parent.property === node) return null;
   if (t === "BinaryExpression" && /^(===|!==|==|!=)$/.test(parent.operator)) return null;
@@ -95,16 +131,41 @@ function textSlots(element: any, file: string): TextSlot[] | "composite" {
       const rendered = renderJsxText(child.value);
       if (rendered === "" || /^\s+$/.test(rendered)) continue;
       const leadingNewlines = (/^\s*/.exec(child.value)![0].match(/\n/g) ?? []).length;
-      slots.push({ file, line: child.loc.start.line + leadingNewlines, start: child.start, end: child.end, kind: "jsxtext", rendered, raw: child.value });
+      slots.push({
+        file,
+        line: child.loc.start.line + leadingNewlines,
+        start: child.start,
+        end: child.end,
+        kind: "jsxtext",
+        rendered,
+        raw: child.value,
+      });
     } else if (child.type === "JSXExpressionContainer") {
       const e = child.expression;
       if (e.type === "StringLiteral") {
         if (e.value.trim() === "") continue;
-        slots.push({ file, line: e.loc.start.line, start: e.start, end: e.end, kind: "string", rendered: e.value, raw: e.extra?.raw ?? "", quote: (e.extra?.raw ?? '"')[0] });
+        slots.push({
+          file,
+          line: e.loc.start.line,
+          start: e.start,
+          end: e.end,
+          kind: "string",
+          rendered: e.value,
+          raw: e.extra?.raw ?? "",
+          quote: (e.extra?.raw ?? '"')[0],
+        });
       } else if (e.type === "TemplateLiteral" && e.expressions.length === 0) {
         const v = e.quasis[0].value.cooked ?? "";
         if (v.trim() === "") continue;
-        slots.push({ file, line: e.loc.start.line, start: e.start, end: e.end, kind: "template", rendered: v, raw: e.quasis[0].value.raw });
+        slots.push({
+          file,
+          line: e.loc.start.line,
+          start: e.start,
+          end: e.end,
+          kind: "template",
+          rendered: v,
+          raw: e.quasis[0].value.raw,
+        });
       } else if (e.type === "JSXEmptyExpression") {
         continue;
       } else {
@@ -136,7 +197,11 @@ function findElementAt(ast: any, line: number, column: number): any | null {
   let found: any = null;
   walk(ast, (node) => {
     if (found) return;
-    if (node.type === "JSXElement" && node.openingElement.loc.start.line === line && node.openingElement.loc.start.column === column) {
+    if (
+      node.type === "JSXElement" &&
+      node.openingElement.loc.start.line === line &&
+      node.openingElement.loc.start.column === column
+    ) {
       found = node;
     }
   });
@@ -188,16 +253,20 @@ function searchText(root: string, text: string): TextSlot[] {
     } catch {
       continue;
     }
-    walk(ast, (node, parent, ancestors) => {
-      if (node.type === "JSXElement") {
-        const slots = textSlots(node, file);
-        if (slots === "composite") return;
-        for (const slot of slots) push({ ...slot, tier: 1 });
-      } else if (node.type === "StringLiteral" || node.type === "TemplateLiteral") {
-        const tier = literalTier(node, parent, ancestors);
-        if (tier) push(stringSlot(node, file, tier));
-      }
-    }, []);
+    walk(
+      ast,
+      (node, parent, ancestors) => {
+        if (node.type === "JSXElement") {
+          const slots = textSlots(node, file);
+          if (slots === "composite") return;
+          for (const slot of slots) push({ ...slot, tier: 1 });
+        } else if (node.type === "StringLiteral" || node.type === "TemplateLiteral") {
+          const tier = literalTier(node, parent, ancestors);
+          if (tier) push(stringSlot(node, file, tier));
+        }
+      },
+      [],
+    );
   }
   return hits;
 }
@@ -250,7 +319,8 @@ export function locateTextEdit(root: string, edit: TextEdit): Located | EditFail
 
   if (edit.file && edit.line != null && edit.column != null) {
     const abs = path.resolve(root, edit.file);
-    if (!abs.startsWith(path.resolve(root))) return { ok: false, reason: "unsupported", message: "File outside project." };
+    if (!abs.startsWith(path.resolve(root)))
+      return { ok: false, reason: "unsupported", message: "File outside project." };
     if (fs.existsSync(abs)) {
       const code = fs.readFileSync(abs, "utf8");
       let ast: any = null;

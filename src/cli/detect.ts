@@ -46,14 +46,18 @@ export function detectProject(root: string): Project {
 
   if (deps.next) {
     return {
-      root, framework: "next", pm,
+      root,
+      framework: "next",
+      pm,
       devCommand: hasDevScript ? run("dev") : exec("next", "dev"),
       configFile: findConfig(root, ["next.config.ts", "next.config.mjs", "next.config.js", "next.config.cjs"]),
     };
   }
   if (deps.vite) {
     return {
-      root, framework: "vite", pm,
+      root,
+      framework: "vite",
+      pm,
       devCommand: hasDevScript ? run("dev") : exec("vite"),
       configFile: findConfig(root, ["vite.config.ts", "vite.config.mts", "vite.config.js", "vite.config.mjs"]),
     };

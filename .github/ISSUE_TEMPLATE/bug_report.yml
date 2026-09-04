@@ -1,0 +1,41 @@
+name: Bug report
+description: Something did not work on a real project
+labels: [bug]
+body:
+  - type: input
+    id: framework
+    attributes:
+      label: Framework and version
+      placeholder: "Next.js 16.2 (Turbopack) / Vite 6 + @vitejs/plugin-react"
+    validations:
+      required: true
+  - type: input
+    id: crayon
+    attributes:
+      label: Crayon version
+      placeholder: "npx crayon-dev --version"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you clicked, what you typed, what the toolbar and the terminal said.
+    validations:
+      required: true
+  - type: textarea
+    id: jsx
+    attributes:
+      label: The JSX around the text
+      description: The lines of the component that render the text you clicked.
+      render: tsx
+  - type: textarea
+    id: terminal
+    attributes:
+      label: Terminal output
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: OS, Node version, package manager
+      placeholder: "macOS 15, Node 22, pnpm"

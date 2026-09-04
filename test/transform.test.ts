@@ -13,7 +13,9 @@ describe("addSourceAttributes", () => {
 
   it("handles self-closing and typed elements", () => {
     const out = addSourceAttributes(`const a = <img src="x" />;\nconst b = <br/>;`, "/p/a.tsx", "/p");
-    expect(out.code).toBe(`const a = <img data-crayon="a.tsx:1:10" src="x" />;\nconst b = <br data-crayon="a.tsx:2:10"/>;`);
+    expect(out.code).toBe(
+      `const a = <img data-crayon="a.tsx:1:10" src="x" />;\nconst b = <br data-crayon="a.tsx:2:10"/>;`,
+    );
   });
 
   it("skips files without JSX", () => {

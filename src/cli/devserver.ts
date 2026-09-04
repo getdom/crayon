@@ -32,7 +32,13 @@ export function startDevServer(project: Project, timeoutMs = 90_000): Promise<De
 
     const onData = (chunk: Buffer) => {
       const text = chunk.toString();
-      process.stdout.write(text.split("\n").filter(Boolean).map((l) => pc.dim("│ ") + l).join("\n") + "\n");
+      process.stdout.write(
+        text
+          .split("\n")
+          .filter(Boolean)
+          .map((l) => pc.dim("│ ") + l)
+          .join("\n") + "\n",
+      );
       if (done) return;
       const m = URL_RE.exec(text.replace(/\x1b\[[0-9;]*m/g, ""));
       if (m) {

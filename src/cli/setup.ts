@@ -39,7 +39,12 @@ export async function install(project: Project): Promise<boolean> {
     console.log(pc.green(`✓ linked ${PKG}`) + pc.dim(` → ${own}`));
     return true;
   }
-  const cmd = { npm: ["npm", "install", "-D", PKG], pnpm: ["pnpm", "add", "-D", PKG], yarn: ["yarn", "add", "-D", PKG], bun: ["bun", "add", "-d", PKG] }[project.pm];
+  const cmd = {
+    npm: ["npm", "install", "-D", PKG],
+    pnpm: ["pnpm", "add", "-D", PKG],
+    yarn: ["yarn", "add", "-D", PKG],
+    bun: ["bun", "add", "-d", PKG],
+  }[project.pm];
   console.log(pc.dim(`$ ${cmd.join(" ")}`));
   const r = await execa(cmd[0], cmd.slice(1), { cwd: project.root, stdio: "inherit", reject: false });
   if (r.exitCode !== 0) {
@@ -83,7 +88,10 @@ export function patchConfig(project: Project): boolean {
 
   if (project.framework === "next") {
     if (isCjs) {
-      out = src.replace(/module\.exports\s*=\s*([^;]+);?/, (_m, expr) => `module.exports = withCrayon(${expr.trim()});`);
+      out = src.replace(
+        /module\.exports\s*=\s*([^;]+);?/,
+        (_m, expr) => `module.exports = withCrayon(${expr.trim()});`,
+      );
       out = `const { withCrayon } = require("crayon-dev/next");\n` + out;
     } else if (/export\s+default\s+/.test(src)) {
       out = src.replace(/export\s+default\s+([^;]+);?/, (_m, expr) => `export default withCrayon(${expr.trim()});`);
@@ -92,7 +100,9 @@ export function patchConfig(project: Project): boolean {
   } else if (project.framework === "vite") {
     if (/plugins\s*:\s*\[/.test(src)) {
       out = src.replace(/plugins\s*:\s*\[/, "plugins: [crayon(), ");
-      out = (isCjs ? `const { crayon } = require("crayon-dev/vite");\n` : `import { crayon } from "crayon-dev/vite";\n`) + out;
+      out =
+        (isCjs ? `const { crayon } = require("crayon-dev/vite");\n` : `import { crayon } from "crayon-dev/vite";\n`) +
+        out;
     }
   }
 
@@ -112,7 +122,9 @@ export async function ensureConfigured(project: Project, autoSetup: boolean): Pr
     return false;
   }
   const rel = path.relative(project.root, project.configFile);
-  const needs = [!installed && `${PKG} as a dev dependency`, !configured && `one line in ${pc.bold(rel)}`].filter(Boolean).join(" and ");
+  const needs = [!installed && `${PKG} as a dev dependency`, !configured && `one line in ${pc.bold(rel)}`]
+    .filter(Boolean)
+    .join(" and ");
   let yes = autoSetup;
   if (!yes) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });

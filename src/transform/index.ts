@@ -15,13 +15,7 @@ export function parseSource(code: string, filename: string) {
     sourceType: "module",
     sourceFilename: filename,
     errorRecovery: true,
-    plugins: [
-      "jsx",
-      "typescript",
-      "decorators-legacy",
-      "importAttributes",
-      "explicitResourceManagement",
-    ],
+    plugins: ["jsx", "typescript", "decorators-legacy", "importAttributes", "explicitResourceManagement"],
   });
 }
 
@@ -70,9 +64,7 @@ export function addSourceAttributes(code: string, filename: string, root = proce
   let count = 0;
   walk(ast, (node) => {
     if (node.type !== "JSXOpeningElement" || !isHostElement(node)) return;
-    const already = node.attributes?.some(
-      (a: any) => a.type === "JSXAttribute" && a.name?.name === ATTR,
-    );
+    const already = node.attributes?.some((a: any) => a.type === "JSXAttribute" && a.name?.name === ATTR);
     if (already) return;
     const { line, column } = node.loc.start;
     const insertAt = node.typeArguments?.end ?? node.typeParameters?.end ?? node.name.end;

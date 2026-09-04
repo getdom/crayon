@@ -28,8 +28,17 @@ describe("renderJsxText", () => {
 
 describe("applyTextEdit", () => {
   it("edits a multi-line JSX text at the located element and keeps indentation", () => {
-    file("app/page.tsx", `export default function P() {\n  return (\n    <h1 className="x">\n      Bonjour le monde\n    </h1>\n  );\n}\n`);
-    const r = applyTextEdit(root, { file: "app/page.tsx", line: 3, column: 4, oldText: "Bonjour le monde", newText: "Salut à tous" });
+    file(
+      "app/page.tsx",
+      `export default function P() {\n  return (\n    <h1 className="x">\n      Bonjour le monde\n    </h1>\n  );\n}\n`,
+    );
+    const r = applyTextEdit(root, {
+      file: "app/page.tsx",
+      line: 3,
+      column: 4,
+      oldText: "Bonjour le monde",
+      newText: "Salut à tous",
+    });
     expect(r).toMatchObject({ ok: true, how: "located", file: "app/page.tsx", line: 4 });
     expect(read("app/page.tsx")).toContain(`<h1 className="x">\n      Salut à tous\n    </h1>`);
   });
@@ -48,8 +57,17 @@ describe("applyTextEdit", () => {
 
   it("falls back to a unique text match when the element is a component child", () => {
     file("components/button.tsx", `export function Button({ children }) { return <button>{children}</button>; }`);
-    file("app/page.tsx", `import { Button } from "../components/button";\nexport default () => <Button>Réserver</Button>;`);
-    const r = applyTextEdit(root, { file: "components/button.tsx", line: 1, column: 47, oldText: "Réserver", newText: "Réserver maintenant" });
+    file(
+      "app/page.tsx",
+      `import { Button } from "../components/button";\nexport default () => <Button>Réserver</Button>;`,
+    );
+    const r = applyTextEdit(root, {
+      file: "components/button.tsx",
+      line: 1,
+      column: 47,
+      oldText: "Réserver",
+      newText: "Réserver maintenant",
+    });
     expect(r).toMatchObject({ ok: true, how: "matched", file: "app/page.tsx" });
     expect(read("app/page.tsx")).toContain("<Button>Réserver maintenant</Button>");
   });
@@ -58,30 +76,61 @@ describe("applyTextEdit", () => {
     file("a.tsx", `const a = <p>Voir</p>; const b = <span>Voir</span>;`);
     file("b.tsx", `const c = <p>{title}</p>;`);
     expect(applyTextEdit(root, { oldText: "Voir", newText: "Lire" })).toMatchObject({ ok: false, reason: "ambiguous" });
-    expect(applyTextEdit(root, { file: "b.tsx", line: 1, column: 10, oldText: "Mon titre", newText: "X" })).toMatchObject({ ok: false, reason: "dynamic" });
+    expect(
+      applyTextEdit(root, { file: "b.tsx", line: 1, column: 10, oldText: "Mon titre", newText: "X" }),
+    ).toMatchObject({ ok: false, reason: "dynamic" });
   });
 
   it("finds text passed as a JSX attribute", () => {
-    file("field.tsx", `export function Field({ label, children }) { return <label><span>{label}</span>{children}</label>; }`);
-    file("page.tsx", `import { Field } from "./field";\nexport default () => <Field label="Commune" className="Commune"><input /></Field>;`);
+    file(
+      "field.tsx",
+      `export function Field({ label, children }) { return <label><span>{label}</span>{children}</label>; }`,
+    );
+    file(
+      "page.tsx",
+      `import { Field } from "./field";\nexport default () => <Field label="Commune" className="Commune"><input /></Field>;`,
+    );
     const r = applyTextEdit(root, { file: "field.tsx", line: 1, column: 57, oldText: "Commune", newText: "Ville" });
     expect(r).toMatchObject({ ok: true, how: "matched", file: "page.tsx" });
     expect(read("page.tsx")).toContain(`<Field label="Ville" className="Commune">`);
   });
 
   it("finds text inside a conditional expression and prefers JSX text over other literals", () => {
-    file("a.tsx", `const a = <div>{ok ? "Projet finançable" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`);
-    const r = applyTextEdit(root, { file: "a.tsx", line: 1, column: 10, oldText: "Projet finançable", newText: "Projet OK" });
+    file(
+      "a.tsx",
+      `const a = <div>{ok ? "Projet finançable" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`,
+    );
+    const r = applyTextEdit(root, {
+      file: "a.tsx",
+      line: 1,
+      column: 10,
+      oldText: "Projet finançable",
+      newText: "Projet OK",
+    });
     expect(r).toMatchObject({ ok: true, how: "matched" });
-    expect(read("a.tsx")).toBe(`const a = <div>{ok ? "Projet OK" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`);
+    expect(read("a.tsx")).toBe(
+      `const a = <div>{ok ? "Projet OK" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`,
+    );
   });
 
   it("uses DOM ancestors to pick between identical props", () => {
     file("field.tsx", `export function Field({ label }) { return <label><span>{label}</span></label>; }`);
-    file("page.tsx", `import { Field } from "./field";\nexport default () => (\n  <main>\n    <section>\n      <Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Surface" />\n    </section>\n  </main>\n);`);
-    const r = applyTextEdit(root, { file: "field.tsx", line: 1, column: 44, ancestors: ["page.tsx:7:4", "page.tsx:3:2"], oldText: "Surface", newText: "Superficie" });
+    file(
+      "page.tsx",
+      `import { Field } from "./field";\nexport default () => (\n  <main>\n    <section>\n      <Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Surface" />\n    </section>\n  </main>\n);`,
+    );
+    const r = applyTextEdit(root, {
+      file: "field.tsx",
+      line: 1,
+      column: 44,
+      ancestors: ["page.tsx:7:4", "page.tsx:3:2"],
+      oldText: "Surface",
+      newText: "Superficie",
+    });
     expect(r).toMatchObject({ ok: true, how: "matched", file: "page.tsx", line: 8 });
-    expect(read("page.tsx")).toContain(`<Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Superficie" />`);
+    expect(read("page.tsx")).toContain(
+      `<Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Superficie" />`,
+    );
   });
 
   it("ignores imports, object keys and classNames", () => {

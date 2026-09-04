@@ -2,6 +2,7 @@
 process.noDeprecation = true; // http-proxy still uses util._extend
 import { defineCommand, runMain } from "citty";
 import path from "node:path";
+import { createRequire } from "node:module";
 import pc from "picocolors";
 import open from "open";
 import { detectProject } from "./detect.js";
@@ -10,8 +11,10 @@ import { startDevServer } from "./devserver.js";
 import { startProxy } from "./proxy.js";
 import { EditSession } from "./edits.js";
 
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+
 const main = defineCommand({
-  meta: { name: "crayon", version: "0.1.0", description: "Edit your site on the page, write straight to the code." },
+  meta: { name: "crayon", version, description: "Edit your site on the page, write straight to the code." },
   args: {
     dir: { type: "positional", description: "Project directory", default: "." },
     port: { type: "string", description: "Port for the Crayon window", default: "4400" },

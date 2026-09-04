@@ -140,7 +140,8 @@ class Overlay {
 
   send(msg: any): Promise<any> {
     return new Promise((resolve) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return resolve({ ok: false, message: "Crayon is not connected. Is the CLI still running?" });
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN)
+        return resolve({ ok: false, message: "Crayon is not connected. Is the CLI still running?" });
       const id = ++this.seq;
       this.pending.set(id, resolve);
       this.ws.send(JSON.stringify({ ...msg, id }));
@@ -206,7 +207,8 @@ class Overlay {
   /** Text-only elements are editable in place. */
   isTextOnly(el: Element): boolean {
     if (!(el instanceof HTMLElement)) return false;
-    if (["SCRIPT", "STYLE", "INPUT", "TEXTAREA", "SELECT", "IMG", "SVG", "VIDEO", "CANVAS"].includes(el.tagName)) return false;
+    if (["SCRIPT", "STYLE", "INPUT", "TEXTAREA", "SELECT", "IMG", "SVG", "VIDEO", "CANVAS"].includes(el.tagName))
+      return false;
     if (el.childElementCount > 0) return false;
     return (el.textContent ?? "").trim().length > 0;
   }
