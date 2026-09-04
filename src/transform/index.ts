@@ -25,17 +25,18 @@ export function parseSource(code: string, filename: string) {
   });
 }
 
-/** Walk every node of a Babel AST, depth first. */
-export function walk(node: any, visit: (node: any, parent: any) => void, parent: any = null) {
+/** Walk every node of a Babel AST, depth first. `ancestors` is nearest-first. */
+export function walk(node: any, visit: (node: any, parent: any, ancestors: any[]) => void, ancestors: any[] = []) {
   if (!node || typeof node.type !== "string") return;
-  visit(node, parent);
+  visit(node, ancestors[0] ?? null, ancestors);
+  const next = [node, ...ancestors];
   for (const key of Object.keys(node)) {
     if (key === "loc" || key === "extra" || key === "leadingComments" || key === "trailingComments") continue;
     const value = node[key];
     if (Array.isArray(value)) {
-      for (const child of value) walk(child, visit, node);
+      for (const child of value) walk(child, visit, next);
     } else if (value && typeof value.type === "string") {
-      walk(value, visit, node);
+      walk(value, visit, next);
     }
   }
 }

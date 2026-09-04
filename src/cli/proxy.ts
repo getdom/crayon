@@ -130,7 +130,7 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
         return;
       }
       if (msg.type === "edit") {
-        const result = opts.session.text({ file: msg.file, line: msg.line, column: msg.column, oldText: msg.oldText, newText: msg.newText });
+        const result = opts.session.text({ file: msg.file, line: msg.line, column: msg.column, ancestors: Array.isArray(msg.ancestors) ? msg.ancestors.slice(0, 40) : [], oldText: msg.oldText, newText: msg.newText });
         ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size }));
       } else if (msg.type === "undo") {
         const r = opts.session.undo();

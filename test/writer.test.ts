@@ -61,6 +61,34 @@ describe("applyTextEdit", () => {
     expect(applyTextEdit(root, { file: "b.tsx", line: 1, column: 10, oldText: "Mon titre", newText: "X" })).toMatchObject({ ok: false, reason: "dynamic" });
   });
 
+  it("finds text passed as a JSX attribute", () => {
+    file("field.tsx", `export function Field({ label, children }) { return <label><span>{label}</span>{children}</label>; }`);
+    file("page.tsx", `import { Field } from "./field";\nexport default () => <Field label="Commune" className="Commune"><input /></Field>;`);
+    const r = applyTextEdit(root, { file: "field.tsx", line: 1, column: 57, oldText: "Commune", newText: "Ville" });
+    expect(r).toMatchObject({ ok: true, how: "matched", file: "page.tsx" });
+    expect(read("page.tsx")).toContain(`<Field label="Ville" className="Commune">`);
+  });
+
+  it("finds text inside a conditional expression and prefers JSX text over other literals", () => {
+    file("a.tsx", `const a = <div>{ok ? "Projet finançable" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`);
+    const r = applyTextEdit(root, { file: "a.tsx", line: 1, column: 10, oldText: "Projet finançable", newText: "Projet OK" });
+    expect(r).toMatchObject({ ok: true, how: "matched" });
+    expect(read("a.tsx")).toBe(`const a = <div>{ok ? "Projet OK" : "Projet hors budget"}</div>;\nconst tag = "Projet finançable";`);
+  });
+
+  it("uses DOM ancestors to pick between identical props", () => {
+    file("field.tsx", `export function Field({ label }) { return <label><span>{label}</span></label>; }`);
+    file("page.tsx", `import { Field } from "./field";\nexport default () => (\n  <main>\n    <section>\n      <Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Surface" />\n    </section>\n  </main>\n);`);
+    const r = applyTextEdit(root, { file: "field.tsx", line: 1, column: 44, ancestors: ["page.tsx:7:4", "page.tsx:3:2"], oldText: "Surface", newText: "Superficie" });
+    expect(r).toMatchObject({ ok: true, how: "matched", file: "page.tsx", line: 8 });
+    expect(read("page.tsx")).toContain(`<Field label="Surface" />\n    </section>\n    <section>\n      <Field label="Superficie" />`);
+  });
+
+  it("ignores imports, object keys and classNames", () => {
+    file("a.tsx", `import x from "Voir";\nconst o = { "Voir": 1 };\nconst b = <p className="Voir">{t}</p>;`);
+    expect(applyTextEdit(root, { oldText: "Voir", newText: "Lire" })).toMatchObject({ ok: false, reason: "dynamic" });
+  });
+
   it("refuses composite children", () => {
     file("a.tsx", `const a = <p>Hello <b>world</b></p>;`);
     const r = applyTextEdit(root, { file: "a.tsx", line: 1, column: 10, oldText: "Hello world", newText: "X" });

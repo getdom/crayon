@@ -66,6 +66,7 @@ class Overlay {
   editing: HTMLElement | null = null;
   editingOld = "";
   editingLocator: Locator = null;
+  editingAncestors: string[] = [];
   pending = new Map<number, (r: any) => void>();
   seq = 0;
   history = 0;
@@ -190,6 +191,18 @@ class Overlay {
     return m ? { file: m[1], line: Number(m[2]), column: Number(m[3]) } : null;
   }
 
+  /** data-crayon values up the tree, nearest first, without repeats. */
+  ancestorsOf(el: Element): string[] {
+    const out: string[] = [];
+    let node: Element | null = el.parentElement;
+    while (node) {
+      const v = node.getAttribute(ATTR);
+      if (v && !out.includes(v)) out.push(v);
+      node = node.parentElement;
+    }
+    return out;
+  }
+
   /** Text-only elements are editable in place. */
   isTextOnly(el: Element): boolean {
     if (!(el instanceof HTMLElement)) return false;
@@ -302,6 +315,7 @@ class Overlay {
     this.editing = el;
     this.editingOld = el.textContent ?? "";
     this.editingLocator = this.locatorOf(el);
+    this.editingAncestors = this.ancestorsOf(el);
     this.hovered = null;
     try {
       el.contentEditable = "plaintext-only";
@@ -356,6 +370,7 @@ class Overlay {
     const newText = (el.textContent ?? "").replace(/ /g, " ");
     const oldText = this.editingOld;
     const locator = this.editingLocator;
+    const ancestors = this.editingAncestors;
     this.finishEdit();
     if (newText.trim() === oldText.trim()) {
       this.say("No change");
@@ -367,7 +382,7 @@ class Overlay {
       return;
     }
     this.say("Saving…");
-    const r = await this.send({ type: "edit", ...(locator ?? {}), oldText, newText });
+    const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
     if (r.ok) {
       this.say(`✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : ""}`, "ok");
     } else {

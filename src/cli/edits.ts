@@ -13,7 +13,7 @@ export class EditSession {
   private history: Snapshot[] = [];
   constructor(private root: string) {}
 
-  text(edit: { file?: string; line?: number; column?: number; oldText: string; newText: string }): EditResult | EditFailure {
+  text(edit: { file?: string; line?: number; column?: number; ancestors?: string[]; oldText: string; newText: string }): EditResult | EditFailure {
     const before = this.snapshotFor(edit.file);
     const result = applyTextEdit(this.root, edit);
     if (result.ok) {
