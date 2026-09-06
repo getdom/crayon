@@ -85,3 +85,24 @@ describe("static html", () => {
     expect(resolveStatic(root, "/../etc/passwd")).toBe(null);
   });
 });
+
+describe("vite config patch", () => {
+  it("adds a plugins array when the config has none", async () => {
+    const { patchConfig } = await import("../src/cli/setup.js");
+    file(
+      "vite.config.js",
+      `import { defineConfig } from "vite";\n\nexport default defineConfig({\n  build: { target: "es2020" },\n});\n`,
+    );
+    const ok = patchConfig({
+      root,
+      framework: "vite",
+      pm: "npm",
+      devCommand: ["vite"],
+      configFile: path.join(root, "vite.config.js"),
+    });
+    expect(ok).toBe(true);
+    expect(read("vite.config.js")).toBe(
+      `import { crayon } from "crayon-dev/vite";\nimport { defineConfig } from "vite";\n\nexport default defineConfig({\n  plugins: [crayon()],\n  build: { target: "es2020" },\n});\n`,
+    );
+  });
+});

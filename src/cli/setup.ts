@@ -98,11 +98,15 @@ export function patchConfig(project: Project): boolean {
       out = `import { withCrayon } from "crayon-dev/next";\n` + out;
     }
   } else if (project.framework === "vite") {
+    const imp = isCjs
+      ? `const { crayon } = require("crayon-dev/vite");\n`
+      : `import { crayon } from "crayon-dev/vite";\n`;
     if (/plugins\s*:\s*\[/.test(src)) {
-      out = src.replace(/plugins\s*:\s*\[/, "plugins: [crayon(), ");
-      out =
-        (isCjs ? `const { crayon } = require("crayon-dev/vite");\n` : `import { crayon } from "crayon-dev/vite";\n`) +
-        out;
+      out = imp + src.replace(/plugins\s*:\s*\[/, "plugins: [crayon(), ");
+    } else if (/defineConfig\(\s*\{/.test(src)) {
+      out = imp + src.replace(/defineConfig\(\s*\{/, "defineConfig({\n  plugins: [crayon()],");
+    } else if (/(export\s+default|module\.exports\s*=)\s*\{/.test(src)) {
+      out = imp + src.replace(/(export\s+default|module\.exports\s*=)\s*\{/, "$1 {\n  plugins: [crayon()],");
     }
   }
 

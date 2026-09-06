@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Vanilla Vite sites (an `index.html` served by Vite, no React): the page is tagged through `transformIndexHtml` and edited with the HTML writer.
+
+### Fixed
+
+- The Vite config patch now handles configs without a `plugins` array (`defineConfig({ build: … })`) instead of giving up.
+
 ## [0.3.0] - 2026-09-06
 
 ### Added

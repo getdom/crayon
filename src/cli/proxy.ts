@@ -228,19 +228,17 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           JSON.stringify({ type: "undone", ...r, history: opts.session.size, pending: opts.session.pendingCount }),
         );
       } else if (msg.type === "publish") {
-        opts.session
-          .publish()
-          .then((r) =>
-            ws.send(
-              JSON.stringify({
-                type: "published",
-                id: msg.id,
-                ...r,
-                history: opts.session.size,
-                pending: opts.session.pendingCount,
-              }),
-            ),
-          );
+        opts.session.publish().then((r) =>
+          ws.send(
+            JSON.stringify({
+              type: "published",
+              id: msg.id,
+              ...r,
+              history: opts.session.size,
+              pending: opts.session.pendingCount,
+            }),
+          ),
+        );
       } else if (msg.type === "ping") {
         opts.session
           .gitStatus()
