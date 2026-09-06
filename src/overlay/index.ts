@@ -120,6 +120,9 @@ class Overlay {
   status = document.createElement("span");
   toggleBtn = document.createElement("button");
   undoBtn = document.createElement("button");
+  publishBtn = document.createElement("button");
+  git: { repo: boolean; branch?: string; upstream?: string } | null = null;
+  pendingCount = 0;
 
   panel = document.createElement("div");
   styleBar = document.createElement("div");
@@ -168,7 +171,10 @@ class Overlay {
     this.undoBtn.textContent = "Undo";
     this.undoBtn.disabled = true;
     this.undoBtn.addEventListener("click", () => this.undo());
-    this.bar.append(brand, sep, this.status, this.undoBtn, this.toggleBtn);
+    this.publishBtn.textContent = "Publish";
+    this.publishBtn.hidden = true;
+    this.publishBtn.addEventListener("click", () => this.publish());
+    this.bar.append(brand, sep, this.status, this.undoBtn, this.publishBtn, this.toggleBtn);
 
     this.box.className = "box";
     this.tag.className = "tag";
@@ -206,7 +212,9 @@ class Overlay {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         if (typeof msg.history === "number") this.setHistory(msg.history);
-        if (msg.type === "result" && this.pending.has(msg.id)) {
+        if (msg.git) this.git = msg.git;
+        if (typeof msg.pending === "number") this.setPending(msg.pending);
+        if ((msg.type === "result" || msg.type === "published") && this.pending.has(msg.id)) {
           this.pending.get(msg.id)!(msg);
           this.pending.delete(msg.id);
         } else if (msg.type === "undone") {
@@ -244,6 +252,44 @@ class Overlay {
     } else {
       this.say("Click any text to edit");
     }
+  }
+
+  setPending(n: number) {
+    this.pendingCount = n;
+    const show = !!this.git?.repo && n > 0;
+    this.publishBtn.hidden = !show;
+    this.publishBtn.textContent = n > 0 ? `Publish (${n})` : "Publish";
+    this.publishBtn.title = this.git?.upstream
+      ? `Commit and push to ${this.git.upstream}`
+      : `Commit on ${this.git?.branch ?? "this branch"} (no remote branch)`;
+  }
+
+  async publish() {
+    if (!this.pendingCount) return;
+    const what = this.git?.upstream
+      ? `Commit and push ${this.pendingCount} change${this.pendingCount > 1 ? "s" : ""} to ${this.git.upstream}?`
+      : `Commit ${this.pendingCount} change${this.pendingCount > 1 ? "s" : ""} on ${this.git?.branch}? (no remote branch to push to)`;
+    if (this.publishBtn.dataset.confirm !== "1") {
+      this.publishBtn.dataset.confirm = "1";
+      this.publishBtn.textContent = "Confirm";
+      this.say(what);
+      window.setTimeout(() => {
+        if (this.publishBtn.dataset.confirm === "1") {
+          delete this.publishBtn.dataset.confirm;
+          this.setPending(this.pendingCount);
+          this.say(this.enabled ? "Click any text to edit" : "Browsing mode");
+        }
+      }, 6000);
+      return;
+    }
+    delete this.publishBtn.dataset.confirm;
+    this.publishBtn.disabled = true;
+    this.publishBtn.textContent = "Publishing…";
+    this.say("Publishing…");
+    const r = await this.send({ type: "publish" });
+    this.publishBtn.disabled = false;
+    this.setPending(typeof r.pending === "number" ? r.pending : this.pendingCount);
+    this.say(r.ok ? `⇡ ${r.message}` : `✗ ${r.message}`, r.ok ? "ok" : "err", 8000);
   }
 
   setHistory(n: number) {
@@ -288,6 +334,60 @@ class Overlay {
     return out;
   }
 
+  static INLINE = new Set([
+    "B",
+    "STRONG",
+    "EM",
+    "I",
+    "U",
+    "S",
+    "BR",
+    "SPAN",
+    "A",
+    "CODE",
+    "MARK",
+    "SMALL",
+    "SUP",
+    "SUB",
+    "KBD",
+    "ABBR",
+    "TIME",
+  ]);
+
+  /** Text mixed with inline elements (bold, links, line breaks) whose children are plain text. */
+  isComposite(el: Element): boolean {
+    if (!(el instanceof HTMLElement) || el.childElementCount === 0) return false;
+    if (/^(A|BUTTON|UL|OL|TABLE|SECTION|NAV|HEADER|FOOTER|FORM|IMG|SVG)$/.test(el.tagName)) return false;
+    for (const c of el.children) {
+      if (!Overlay.INLINE.has(c.tagName)) return false;
+      if (c.tagName !== "BR" && c.childElementCount > 0) return false;
+    }
+    return (el.textContent ?? "").trim().length > 0;
+  }
+
+  /** Serialise an edited composite element into parts the writer can map back to the source. */
+  partsOf(el: HTMLElement): any[] {
+    const parts: any[] = [];
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent ?? "";
+        if (t) parts.push({ text: t });
+      } else if (node instanceof Element) {
+        parts.push({
+          tag: node.tagName.toLowerCase(),
+          locator: node.getAttribute(ATTR) ?? undefined,
+          text: node.textContent ?? "",
+          void: node.tagName === "BR",
+        });
+      }
+    }
+    return parts;
+  }
+
+  editingComposite = false;
+  editingOldHtml = "";
+  editingCompositeSnapshot: { parts: any[]; childLocator?: string; html: string } | null = null;
+
   /** Text-only elements are editable in place. */
   isTextOnly(el: Element): boolean {
     if (!(el instanceof HTMLElement)) return false;
@@ -300,6 +400,10 @@ class Overlay {
   /** From a click target, pick the element to edit: itself if text-only, otherwise the deepest text-only element under the pointer. */
   pickEditable(target: Element, x: number, y: number): HTMLElement | null {
     if (this.isTextOnly(target)) return target as HTMLElement;
+    // A word inside a bold or a link of a mixed paragraph: edit the whole paragraph.
+    if (target.parentElement && Overlay.INLINE.has(target.tagName) && this.isComposite(target.parentElement))
+      return target.parentElement as HTMLElement;
+    if (this.isComposite(target)) return target as HTMLElement;
     let best: HTMLElement | null = null;
     const walker = document.createTreeWalker(target, NodeFilter.SHOW_ELEMENT);
     let node = walker.nextNode() as Element | null;
@@ -319,7 +423,11 @@ class Overlay {
   onMove = (e: MouseEvent) => {
     if (!this.enabled || this.editing || this.isOurs(e.target)) return;
     const target = e.target as Element;
-    const el = this.isTextOnly(target) ? target : (target.closest(`[${ATTR}]`) ?? null);
+    const el = this.isTextOnly(target)
+      ? target
+      : this.isComposite(target)
+        ? target
+        : (target.closest(`[${ATTR}]`) ?? null);
     this.hover(el);
   };
 
@@ -416,6 +524,8 @@ class Overlay {
   startEdit(el: HTMLElement) {
     this.editing = el;
     this.editingOld = el.textContent ?? "";
+    this.editingComposite = this.isComposite(el);
+    this.editingOldHtml = el.innerHTML;
     this.editingLocator = this.locatorOf(el);
     this.editingAncestors = this.ancestorsOf(el);
     this.hovered = null;
@@ -474,7 +584,8 @@ class Overlay {
   cancelEdit() {
     const el = this.editing;
     if (!el) return;
-    el.textContent = this.editingOld;
+    if (this.editingComposite) el.innerHTML = this.editingOldHtml;
+    else el.textContent = this.editingOld;
     for (const t of this.staged.add) el.classList.remove(t);
     for (const t of this.staged.remove) el.classList.add(t);
     this.staged = { remove: new Set(), add: new Set() };
@@ -493,6 +604,15 @@ class Overlay {
     const isOwn = el.hasAttribute(ATTR);
     const staged = this.staged;
     this.staged = { remove: new Set(), add: new Set() };
+    if (this.editingComposite) {
+      this.editingCompositeSnapshot = {
+        parts: this.partsOf(el),
+        childLocator: [...el.children].map((c) => c.getAttribute(ATTR)).find(Boolean) ?? undefined,
+        html: this.editingOldHtml,
+      };
+    } else {
+      this.editingCompositeSnapshot = null;
+    }
     this.finishEdit();
     const collapse = (t: string) => t.replace(/[\s\u00a0]+/g, " ").trim();
     const textChanged = collapse(newText) !== collapse(oldText);
@@ -508,7 +628,22 @@ class Overlay {
     }
     this.say("Saving…");
     const notes: string[] = [];
-    if (textChanged) {
+    if (textChanged && this.editingCompositeSnapshot) {
+      const snap = this.editingCompositeSnapshot;
+      this.editingCompositeSnapshot = null;
+      const r = await this.send({
+        type: "composite",
+        ...(isOwn ? ownLocator : {}),
+        childLocator: snap.childLocator,
+        parts: snap.parts,
+        oldText,
+      });
+      if (r.ok) notes.push(`✓ ${r.file}:${r.line}`);
+      else {
+        el.innerHTML = snap.html;
+        notes.push(`✗ ${r.message}`);
+      }
+    } else if (textChanged) {
       const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
       if (r.ok)
         notes.push(
@@ -565,6 +700,20 @@ class Overlay {
     black: "900",
   };
   static SIZE_RE = /^text-(xs|sm|base|lg|xl|\d+xl)$/;
+  static PADS = ["0", "1", "2", "3", "4", "5", "6", "8", "10", "12"];
+  static PAD_RE = /^p-(0|0\.5|1|1\.5|2|2\.5|3|3\.5|4|5|6|7|8|9|10|11|12|14|16|20|24)$/;
+  static RADII = ["none", "sm", "md", "lg", "xl", "2xl", "3xl", "full"];
+  static RADIUS_RE = /^rounded(-(none|sm|md|lg|xl|2xl|3xl|full))?$/;
+  static RADIUS_CSS: Record<string, string> = {
+    none: "0",
+    sm: ".125rem",
+    md: ".375rem",
+    lg: ".5rem",
+    xl: ".75rem",
+    "2xl": "1rem",
+    "3xl": "1.5rem",
+    full: "9999px",
+  };
   static WEIGHT_RE = /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/;
 
   colorValue(name: string): string {
@@ -655,6 +804,11 @@ class Overlay {
       italic: classes.includes("italic"),
       color: classes.find((c) => c.startsWith("text-") && colorNames.has(c.slice(5).split("/")[0]))?.slice(5) ?? "",
       font: classes.find((c) => c.startsWith("font-") && fontNames.includes(c.slice(5)))?.slice(5) ?? "",
+      pad: classes.find((c) => Overlay.PAD_RE.test(c))?.slice(2) ?? "",
+      radius: (() => {
+        const c = classes.find((c) => Overlay.RADIUS_RE.test(c));
+        return c ? (c === "rounded" ? "md" : c.slice(8)) : "";
+      })(),
     };
     const select = (
       label: string,
@@ -725,6 +879,23 @@ class Overlay {
               v ? this.fontValue(v) : "",
             ),
           (opt, v) => (opt.style.fontFamily = this.fontValue(v)),
+        ),
+      );
+    }
+    // Spacing and radius matter on buttons, links and badges; plain paragraphs rarely need them.
+    if (/^(A|BUTTON|SPAN|LI|DIV|LABEL)$/.test(el.tagName) || cur.pad || cur.radius) {
+      bar.append(
+        select("Padding", Overlay.PADS, cur.pad, (v) =>
+          this.swap(el, Overlay.PAD_RE, v ? `p-${v}` : null, "padding", v ? `calc(var(--spacing, .25rem) * ${v})` : ""),
+        ),
+        select("Radius", Overlay.RADII, cur.radius, (v) =>
+          this.swap(
+            el,
+            Overlay.RADIUS_RE,
+            v ? (v === "md" ? "rounded-md" : `rounded-${v}`) : null,
+            "border-radius",
+            v ? Overlay.RADIUS_CSS[v] : "",
+          ),
         ),
       );
     }

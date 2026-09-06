@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-06
+
+### Added
+
+- Publish button: commits the files Crayon wrote since the last publish, with a message listing each edit, and pushes when the branch tracks a remote. Confirm step in the toolbar. Undo history is cleared after a publish.
+- Mixed content editing: `Hello <b>world</b>, see <a href="/x">this</a>` and headlines with `<br />` are edited as one unit, inline elements keep their attributes. Works through components (`<Reveal as="h1">…<br />…</Reveal>`) by locating the tagged child.
+- Padding and radius in the style bar for buttons, links, badges and elements that already carry them.
+- `scripts/e2e-edit.mjs`: append text to an element through a real browser, for manual checks.
+
+### Fixed
+
+- Non-breaking spaces survive an edit as `&nbsp;` instead of turning into plain spaces.
+
 ## [0.2.0] - 2026-09-04
 
 ### Added

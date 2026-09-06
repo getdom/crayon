@@ -64,3 +64,15 @@ Content files (frontmatter, JSON) are read at request time, so Crayon reloads th
 ## Next 16: pages 404 or `proxy.ts` is skipped after adding Crayon
 
 Fixed in 0.2.0: the plugin used to add a `webpack` config next to the Turbopack rules. Update Crayon.
+
+## The Publish button is missing
+
+It appears only inside a git repository and once Crayon has written something. If the project is not under git, initialise it first.
+
+## Publish says "No remote branch to push to"
+
+The commit was made locally; the branch has no upstream. Push it once from the terminal (`git push -u origin <branch>`) and the next Publish will push by itself.
+
+## Publish fails on push
+
+The message shows git's last line: usually authentication or a rejected non-fast-forward. Pull or authenticate in the terminal, then Publish again; the commit is already made and will be pushed.

@@ -77,6 +77,11 @@ The lowest tier with hits is kept. One hit is the answer. Several hits are narro
 - **Expression paths**: when the located element renders `{dict.hero.title}` or `{t("hero.title")}`, the property path is compared with the object-key path of every tier-3 literal; a single match wins over the tier order.
 - **Plain HTML** (`src/static/`): `parse5` with source positions tags elements at serve time; text, attribute and class edits use the same positions. The static server resolves clean URLs (`/about` → `about.html` or `about/index.html`).
 
+## 6. Mixed content and Publish
+
+- **Mixed content** (`src/writer/composite.ts`, `applyHtmlCompositeEdit`): the overlay serialises the edited element as parts, text or `{ tag, locator, text }`. The writer takes the element at the locator (or, when the element is rendered by a component, the parent of a tagged child), checks that every original child is static (text, string literal, inline host element), then rebuilds the children region: text parts encoded, element parts copied from their original source with only their inner text replaced. A part it cannot map back is a refusal, never a guess.
+- **Publish** (`src/cli/git.ts`): the session keeps the list of files it wrote and a one-line summary per edit. Publish runs `git add` on those files only, `git commit` with a title and a bulleted body, then `git push` when `@{u}` exists. It uses the repository's git identity and adds no trailer. On success the pending list and the undo stack are cleared; undoing across a commit would silently diverge from what was pushed.
+
 ## Why these choices
 
 - **TypeScript everywhere.** Bundler loaders and Vite plugins are JavaScript by construction, Babel is the reference parser for JSX, and the user already has Node. A Go or Rust binary would add an install step and gain nothing: parsing one file takes milliseconds.

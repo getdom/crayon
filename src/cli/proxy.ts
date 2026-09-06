@@ -161,7 +161,33 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           oldText: msg.oldText,
           newText: msg.newText,
         });
-        ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size }));
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
+      } else if (msg.type === "composite") {
+        const result = opts.session.composite({
+          file: msg.file,
+          line: msg.line,
+          column: msg.column,
+          childLocator: msg.childLocator,
+          parts: Array.isArray(msg.parts) ? msg.parts.slice(0, 200) : [],
+          oldText: msg.oldText,
+        });
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
       } else if (msg.type === "image") {
         opts.session
           .image({
@@ -187,12 +213,42 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           remove: Array.isArray(msg.remove) ? msg.remove.map(String) : [],
           add: Array.isArray(msg.add) ? msg.add.map(String) : [],
         });
-        ws.send(JSON.stringify({ type: "result", id: msg.id, ...result, history: opts.session.size }));
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
       } else if (msg.type === "undo") {
         const r = opts.session.undo();
-        ws.send(JSON.stringify({ type: "undone", ...r, history: opts.session.size }));
+        ws.send(
+          JSON.stringify({ type: "undone", ...r, history: opts.session.size, pending: opts.session.pendingCount }),
+        );
+      } else if (msg.type === "publish") {
+        opts.session
+          .publish()
+          .then((r) =>
+            ws.send(
+              JSON.stringify({
+                type: "published",
+                id: msg.id,
+                ...r,
+                history: opts.session.size,
+                pending: opts.session.pendingCount,
+              }),
+            ),
+          );
       } else if (msg.type === "ping") {
-        ws.send(JSON.stringify({ type: "pong", history: opts.session.size }));
+        opts.session
+          .gitStatus()
+          .then((git) =>
+            ws.send(
+              JSON.stringify({ type: "pong", history: opts.session.size, pending: opts.session.pendingCount, git }),
+            ),
+          );
       }
     });
   });

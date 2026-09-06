@@ -73,13 +73,19 @@ Every write is echoed in the terminal with the file and line:
 
 ```
 ✎ src/components/hero.tsx:42  "Book a demo" → "Book a call"
+🖼 src/components/hero.tsx:12  src → /hero-2.png
+🎨 src/components/hero.tsx:42  −text-sm +text-lg text-primary
+⇡ Committed and pushed a1b2c3d on main.
 ```
+
+**Publish** commits only the files Crayon touched, with a message that lists each edit, and pushes when the branch tracks a remote. It uses your git identity and never adds trailers. If the branch has no remote, it commits and says so.
 
 ## What it edits today
 
 **Text**
 
 - Written between JSX tags: `<h1>Hello</h1>`, including multi-line text with indentation preserved, or a single word inside a longer text.
+- Mixed with inline markup: `Hello <b>world</b>, see <a href="/x">this</a>` is edited as one unit; bold, links and line breaks keep their attributes.
 - Passed through a component: `<Button>Book a call</Button>`, found by searching the project for that exact string.
 - Passed as a prop: `<Field label="Surface">`, `<Card title="Pricing">`.
 - Inside a JSX expression: `{isPro ? "Pro plan" : "Free plan"}`.
@@ -95,7 +101,7 @@ When the same text appears in several places, Crayon uses the expression that re
 
 **Styles**, on Tailwind projects
 
-- Size, weight, italic, text colour and font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`.
+- Size, weight, italic, text colour and font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`. Padding and radius on buttons, links and badges.
 - The palette is read from your project: your theme's colours first (shadcn tokens, brand colours), then Tailwind's default palette. Fonts are the ones your theme declares.
 - Works inside `cn()` and `clsx()` calls. Refused, with the reason, when styles come from a CSS module or a variant function.
 
@@ -103,7 +109,7 @@ When the text cannot be edited safely, Crayon says so instead of guessing:
 
 - **Computed or data-driven** text (`{price} €`, a CMS field, an i18n key) is refused with the file and line that renders it.
 - **Ambiguous** text lists the candidates.
-- **Composite** text such as `Hello <b>world</b>` is not editable as a whole yet. Click the inner piece instead.
+- **Mixed content with dynamic values** (`Total: {n} <b>items</b>`) is refused as a whole. Click a single piece instead.
 - **Dynamic image sources** (`src={logoUrl}`) name the file and line so you know where the value comes from.
 
 ## Supported setups
@@ -181,10 +187,9 @@ crayon [dir] [options]
 
 In order. Each step ships when it works on real sites, not before.
 
-1. **Publish**: one button that commits and pushes, so a non-developer can ship a copy change.
-2. **Spacing and radius** in the style bar, on the Tailwind scale.
-3. **Composite text**: editing `Hello <b>world</b>` as one unit.
-4. **Background colours** and button variants.
+1. **Background colours** and button variants in the style bar.
+2. **Hosted publish** for clients without a terminal: an agency connects the repo, the client edits from a URL.
+3. **Agent hand-off**: when a text is computed, send the exact file, line and intent to a coding agent.
 
 Not planned: drag-and-drop layout, component creation, anything that makes Crayon a design tool.
 

@@ -58,7 +58,12 @@ function decode(text: string): string {
     );
   });
 }
-const encode = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const encode = (t: string) =>
+  t
+    .replace(/&/g, "&amp;")
+    .replace(/\u00a0/g, "&nbsp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
 /** The raw source range of an element's text content when it contains no child elements. */
 function textRange(el: Element): { start: number; end: number; text: string } | "composite" | null {
@@ -218,4 +223,93 @@ export function applyHtmlClassEdit(
     line: edit.line,
     missing: edit.remove.filter((t) => !current.split(/\s+/).includes(t)),
   };
+}
+
+const INLINE_HTML = new Set([
+  "b",
+  "strong",
+  "em",
+  "i",
+  "u",
+  "s",
+  "br",
+  "span",
+  "a",
+  "code",
+  "mark",
+  "small",
+  "sup",
+  "sub",
+  "kbd",
+  "abbr",
+  "time",
+]);
+
+type HtmlPart = { text: string } | { tag: string; locator?: string; text: string; void?: boolean };
+
+export function applyHtmlCompositeEdit(
+  root: string,
+  edit: { file?: string; line?: number; column?: number; parts: HtmlPart[] },
+): { ok: true; file: string; line: number } | { ok: false; message: string } {
+  if (!edit.file || edit.line == null || edit.column == null)
+    return { ok: false, message: "Cannot locate this element in the HTML." };
+  const abs = path.resolve(root, edit.file);
+  const html = fs.readFileSync(abs, "utf8");
+  const el = elementAt(html, edit.line, edit.column);
+  if (!el || !el.sourceCodeLocation?.endTag) return { ok: false, message: "Element not found in the HTML." };
+  const byPos = new Map<string, Element>();
+  for (const k of el.childNodes) {
+    if ("tagName" in k) {
+      const c = k as Element;
+      if (!INLINE_HTML.has(c.tagName))
+        return { ok: false, message: "This text mixes block elements. Click a single piece of text instead." };
+      const st = c.sourceCodeLocation!.startTag!;
+      byPos.set(`${st.startLine}:${st.startCol - 1}`, c);
+    }
+  }
+  const regionStart = el.sourceCodeLocation.startTag!.endOffset;
+  const regionEnd = el.sourceCodeLocation.endTag.startOffset;
+  const region = html.slice(regionStart, regionEnd);
+  const lead = /^\s*/.exec(region)![0];
+  const trail = /\s*$/.exec(region)![0];
+  const out: string[] = [];
+  for (const part of edit.parts) {
+    if (!("tag" in part)) {
+      out.push(encode(part.text.replace(/\r?\n/g, " ")));
+      continue;
+    }
+    const m = part.locator ? /:(\d+):(\d+)$/.exec(part.locator) : null;
+    const original = m ? byPos.get(`${m[1]}:${m[2]}`) : null;
+    if (!original) {
+      if (part.tag === "br") {
+        out.push("<br>");
+        continue;
+      }
+      return { ok: false, message: `Cannot map <${part.tag}> back to the HTML. Click the text inside it instead.` };
+    }
+    const loc = original.sourceCodeLocation!;
+    let src = html.slice(loc.startOffset, loc.endOffset);
+    if (!part.void && loc.endTag) {
+      const r = textRange(original);
+      if (r === "composite")
+        return { ok: false, message: `The text inside <${part.tag}> is not plain. Click it directly.` };
+      const current = r ? normalize(decode(r.text)) : "";
+      if (current !== normalize(part.text)) {
+        const inner = html.slice(loc.startTag!.endOffset, loc.endTag.startOffset);
+        const l2 = /^\s*/.exec(inner)![0];
+        const t2 = /\s*$/.exec(inner)![0];
+        src =
+          html.slice(loc.startOffset, loc.startTag!.endOffset) +
+          l2 +
+          encode(part.text.replace(/\r?\n/g, " ")) +
+          t2 +
+          html.slice(loc.endTag.startOffset, loc.endOffset);
+      }
+    }
+    out.push(src);
+  }
+  const s = new MagicString(html);
+  s.overwrite(regionStart, regionEnd, lead + out.join("") + trail);
+  fs.writeFileSync(abs, s.toString());
+  return { ok: true, file: edit.file, line: edit.line };
 }

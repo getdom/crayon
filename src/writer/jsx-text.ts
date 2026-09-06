@@ -64,6 +64,7 @@ export function decodeEntities(text: string): string {
 export function encodeJsxText(text: string): string {
   return text
     .replace(/&/g, "&amp;")
+    .replace(/\u00a0/g, "&nbsp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\{/g, "&#123;")
