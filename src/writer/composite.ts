@@ -53,6 +53,9 @@ const INLINE = new Set([
   "time",
 ]);
 
+/** Tags the page may create on its own when the user formats a selection. */
+const NEW_INLINE = new Set(["strong", "em", "b", "i", "u", "s", "mark", "code"]);
+
 /** Rebuild the children of a JSX element from edited parts. Child elements keep their original source. */
 export function applyCompositeEdit(root: string, edit: CompositeEdit): CompositeResult {
   let file = edit.file;
@@ -123,6 +126,11 @@ export function applyCompositeEdit(root: string, edit: CompositeEdit): Composite
     if (!original) {
       if (part.tag === "br") {
         out.push("<br />");
+        continue;
+      }
+      // Formatting added in the page (⌘B, ⌘I): a plain new element.
+      if (NEW_INLINE.has(part.tag)) {
+        out.push(`<${part.tag}>${encodeJsxText(part.text.replace(/\r?\n/g, " "))}</${part.tag}>`);
         continue;
       }
       return { ok: false, message: `Cannot map <${part.tag}> back to the code. Click the text inside it instead.` };

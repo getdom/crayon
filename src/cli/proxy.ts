@@ -153,7 +153,7 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
         return;
       }
       if (msg.type === "edit") {
-        const result = opts.session.text({
+        const result: any = opts.session.text({
           file: msg.file,
           line: msg.line,
           column: msg.column,
@@ -161,6 +161,33 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
           oldText: msg.oldText,
           newText: msg.newText,
         });
+        if (result.ok) result.others = opts.session.occurrences(String(msg.oldText ?? ""));
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
+      } else if (msg.type === "element") {
+        const result = opts.session.element(msg.kind === "delete" ? "delete" : "duplicate", {
+          file: msg.file,
+          line: msg.line,
+          column: msg.column,
+        });
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
+      } else if (msg.type === "replace-all") {
+        const result = opts.session.replaceAll(String(msg.oldText ?? ""), String(msg.newText ?? ""));
         ws.send(
           JSON.stringify({
             type: "result",

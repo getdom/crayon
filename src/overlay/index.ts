@@ -65,6 +65,10 @@ kbd { font: 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #717
 .style .tog.i { font-style: italic; font-family: Georgia, serif; }
 .style .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.35); display: inline-block; }
 .style .muted { color: #a1a1aa; font-weight: 400; padding: 0 8px; }
+.style .sep { width: 1px; height: 16px; background: rgba(255,255,255,.14); margin: 0 2px; }
+.style button.danger:hover { background: rgba(239,68,68,.18); color: #fca5a5; }
+button.offer { background: #312e81; color: #c7d2fe; }
+button.offer:hover { background: #3730a3; }
 .swatches {
   position: fixed; z-index: 2147483646; display: none; width: 300px; max-height: 300px; overflow: auto; padding: 10px;
   background: #16161a; border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.35);
@@ -509,6 +513,12 @@ class Overlay {
       return;
     }
     if (!this.editing) return;
+    if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === "b" || e.key.toLowerCase() === "i")) {
+      e.preventDefault();
+      const done = this.formatSelection(this.editing, e.key.toLowerCase() === "b" ? "strong" : "em");
+      if (!done) this.say("Select some text first to make it bold or italic", "", 3000);
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       this.cancelEdit();
@@ -584,7 +594,7 @@ class Overlay {
   cancelEdit() {
     const el = this.editing;
     if (!el) return;
-    if (this.editingComposite) el.innerHTML = this.editingOldHtml;
+    if (this.editingComposite || el.childElementCount > 0) el.innerHTML = this.editingOldHtml;
     else el.textContent = this.editingOld;
     for (const t of this.staged.add) el.classList.remove(t);
     for (const t of this.staged.remove) el.classList.add(t);
@@ -604,7 +614,8 @@ class Overlay {
     const isOwn = el.hasAttribute(ATTR);
     const staged = this.staged;
     this.staged = { remove: new Set(), add: new Set() };
-    if (this.editingComposite) {
+    const markupChanged = (this.editingComposite || el.childElementCount > 0) && el.innerHTML !== this.editingOldHtml;
+    if (this.editingComposite || el.childElementCount > 0) {
       this.editingCompositeSnapshot = {
         parts: this.partsOf(el),
         childLocator: [...el.children].map((c) => c.getAttribute(ATTR)).find(Boolean) ?? undefined,
@@ -615,7 +626,7 @@ class Overlay {
     }
     this.finishEdit();
     const collapse = (t: string) => t.replace(/[\s\u00a0]+/g, " ").trim();
-    const textChanged = collapse(newText) !== collapse(oldText);
+    const textChanged = collapse(newText) !== collapse(oldText) || markupChanged;
     const classChanged = staged.add.size > 0 || staged.remove.size > 0;
     if (!textChanged && !classChanged) {
       this.say("No change");
@@ -645,11 +656,12 @@ class Overlay {
       }
     } else if (textChanged) {
       const r = await this.send({ type: "edit", ...(locator ?? {}), ancestors, oldText, newText });
-      if (r.ok)
+      if (r.ok) {
         notes.push(
           `✓ ${r.file}:${r.line}${r.how === "matched" ? " (found by text)" : r.how === "data" ? " (content file)" : ""}`,
         );
-      else {
+        if (typeof r.others === "number" && r.others > 0) this.offerReplaceAll(oldText, newText, r.others);
+      } else {
         el.textContent = oldText;
         notes.push(`✗ ${r.message}`);
       }
@@ -771,14 +783,61 @@ class Overlay {
     return [...Object.keys(t.projectColors), ...Object.keys(t.paletteColors)];
   }
 
-  colorRe(): RegExp {
+  colorRe(prefix = "text"): RegExp {
     return new RegExp(
-      "^text-(" +
+      `^${prefix}-(` +
         this.colorNames()
           .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
           .join("|") +
         ")(/\\d+)?$",
     );
+  }
+
+  /** A non-collapsed selection inside the element being edited, if any. */
+  selectionIn(el: HTMLElement): Range | null {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+    if (!el.contains(range.commonAncestorContainer)) return null;
+    if (range.toString().trim() === "") return null;
+    return range;
+  }
+
+  /** Wrap the selection in <strong>/<em>, or unwrap it when it is already entirely inside one. */
+  formatSelection(el: HTMLElement, tag: "strong" | "em"): boolean {
+    const range = this.selectionIn(el);
+    if (!range) return false;
+    const alt = tag === "strong" ? "b" : "i";
+    const node = range.commonAncestorContainer;
+    const host = (node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element))?.closest(
+      `${tag}, ${alt}`,
+    ) as HTMLElement | null;
+    if (host && el.contains(host) && host !== el) {
+      // unwrap the whole formatted run
+      const parent = host.parentNode!;
+      while (host.firstChild) parent.insertBefore(host.firstChild, host);
+      parent.removeChild(host);
+      el.normalize();
+    } else {
+      const wrapper = document.createElement(tag);
+      try {
+        range.surroundContents(wrapper);
+      } catch {
+        // selection crosses element boundaries: extract then wrap
+        wrapper.append(range.extractContents());
+        range.insertNode(wrapper);
+      }
+      // drop empty formatting shells the extraction may leave behind
+      for (const e of el.querySelectorAll("strong:empty, em:empty, b:empty, i:empty")) e.remove();
+      el.normalize();
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      const r = document.createRange();
+      r.selectNodeContents(wrapper);
+      sel?.addRange(r);
+    }
+    this.redraw();
+    return true;
   }
 
   openStyleBar(el: HTMLElement) {
@@ -803,6 +862,7 @@ class Overlay {
       weight: classes.find((c) => Overlay.WEIGHT_RE.test(c))?.slice(5) ?? "",
       italic: classes.includes("italic"),
       color: classes.find((c) => c.startsWith("text-") && colorNames.has(c.slice(5).split("/")[0]))?.slice(5) ?? "",
+      bg: classes.find((c) => c.startsWith("bg-") && colorNames.has(c.slice(3).split("/")[0]))?.slice(3) ?? "",
       font: classes.find((c) => c.startsWith("font-") && fontNames.includes(c.slice(5)))?.slice(5) ?? "",
       pad: classes.find((c) => Overlay.PAD_RE.test(c))?.slice(2) ?? "",
       radius: (() => {
@@ -842,11 +902,20 @@ class Overlay {
         this.swap(el, Overlay.WEIGHT_RE, v ? `font-${v}` : null, "font-weight", v ? Overlay.WEIGHT_CSS[v] : ""),
       ),
     );
+    const bold = document.createElement("button");
+    bold.className = "tog";
+    bold.textContent = "B";
+    bold.title = "Bold the selected words (⌘B). Without a selection, use Weight.";
+    bold.addEventListener("click", () => {
+      if (!this.formatSelection(el, "strong"))
+        this.say("Select some words first, or change the weight of the whole text", "", 3000);
+    });
     const italic = document.createElement("button");
     italic.className = "tog i" + (cur.italic ? " on" : "");
     italic.textContent = "I";
-    italic.title = "Italic";
+    italic.title = "Italic: the selected words (⌘I), or the whole text";
     italic.addEventListener("click", () => {
+      if (this.formatSelection(el, "em")) return;
       const on = !italic.classList.contains("on");
       italic.classList.toggle("on", on);
       this.swap(el, /^(italic|not-italic)$/, on ? "italic" : null, "font-style", on ? "italic" : "");
@@ -863,7 +932,24 @@ class Overlay {
         dot.style.background = this.colorValue(name);
       }),
     );
-    bar.append(italic, color);
+    const bg = document.createElement("button");
+    const bgDot = document.createElement("span");
+    bgDot.className = "swatch";
+    bgDot.style.background = getComputedStyle(el).backgroundColor;
+    bg.append(bgDot, document.createTextNode(cur.bg || "Background"));
+    bg.title = "Background colour";
+    bg.addEventListener("click", () =>
+      this.toggleSwatches(
+        el,
+        cur.bg,
+        (name) => {
+          bg.replaceChildren(bgDot, document.createTextNode(name));
+          bgDot.style.background = this.colorValue(name);
+        },
+        "bg",
+      ),
+    );
+    bar.append(bold, italic, color, bg);
     if (fontNames.length > 1) {
       bar.append(
         select(
@@ -899,9 +985,57 @@ class Overlay {
         ),
       );
     }
+    const sep = document.createElement("span");
+    sep.className = "sep";
+    const dup = document.createElement("button");
+    dup.textContent = "Duplicate";
+    dup.title = `Insert a copy of this <${el.tagName.toLowerCase()}> right after it`;
+    dup.addEventListener("click", () => this.elementOp(el, "duplicate"));
+    const del = document.createElement("button");
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.title = `Remove this <${el.tagName.toLowerCase()}> from the code (Undo brings it back)`;
+    del.addEventListener("click", () => this.elementOp(el, "delete"));
+    bar.append(sep, dup, del);
     for (const b of bar.querySelectorAll("button")) b.addEventListener("mousedown", (e) => e.preventDefault());
     bar.classList.add("open");
     this.placeStyleBar(el);
+  }
+
+  async elementOp(el: HTMLElement, kind: "duplicate" | "delete") {
+    const loc = this.locatorOf(el);
+    if (!el.hasAttribute(ATTR) || !loc) {
+      this.say("This element is rendered by a component. Change it in that component's file.", "err");
+      return;
+    }
+    this.cancelEdit();
+    this.say(kind === "duplicate" ? "Duplicating…" : "Deleting…");
+    const r = await this.send({ type: "element", kind, ...loc });
+    if (!r.ok) {
+      this.say(`✗ ${r.message}`, "err", 8000);
+      return;
+    }
+    if (kind === "delete") el.remove();
+    else el.after(el.cloneNode(true));
+    this.hover(null);
+    this.say(`✓ ${kind === "duplicate" ? "Duplicated" : "Deleted"} · ${r.file}:${r.line}`, "ok");
+  }
+
+  /** After a text edit, offer to change the same text everywhere else. */
+  offerReplaceAll(oldText: string, newText: string, others: number) {
+    const btn = document.createElement("button");
+    btn.className = "offer";
+    btn.textContent = `Also replace in ${others} other place${others > 1 ? "s" : ""}`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const r = await this.send({ type: "replace-all", oldText, newText });
+      btn.remove();
+      if (r.ok)
+        this.say(`✓ Replaced ${r.count} occurrence${r.count > 1 ? "s" : ""} in ${r.files.join(", ")}`, "ok", 8000);
+      else this.say(`✗ ${r.message}`, "err", 8000);
+    });
+    this.bar.insertBefore(btn, this.undoBtn);
+    window.setTimeout(() => btn.remove(), 15000);
   }
 
   placeStyleBar(el: Element) {
@@ -912,7 +1046,7 @@ class Overlay {
     bar.style.left = `${Math.min(Math.max(8, r.left), window.innerWidth - bar.offsetWidth - 8)}px`;
   }
 
-  toggleSwatches(el: HTMLElement, current: string, onPick: (name: string) => void) {
+  toggleSwatches(el: HTMLElement, current: string, onPick: (name: string) => void, prefix: "text" | "bg" = "text") {
     const sw = this.swatches;
     if (sw.classList.contains("open")) {
       sw.classList.remove("open");
@@ -921,7 +1055,13 @@ class Overlay {
     const t = this.theme!;
     sw.innerHTML = "";
     const pick = (name: string) => {
-      this.swap(el, this.colorRe(), `text-${name}`, "color", this.colorValue(name));
+      this.swap(
+        el,
+        this.colorRe(prefix),
+        `${prefix}-${name}`,
+        prefix === "bg" ? "background-color" : "color",
+        this.colorValue(name),
+      );
       onPick(name);
       sw.classList.remove("open");
     };

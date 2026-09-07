@@ -285,6 +285,10 @@ export function applyHtmlCompositeEdit(
         out.push("<br>");
         continue;
       }
+      if (/^(strong|em|b|i|u|s|mark|code)$/.test(part.tag)) {
+        out.push(`<${part.tag}>${encode(part.text.replace(/\r?\n/g, " "))}</${part.tag}>`);
+        continue;
+      }
       return { ok: false, message: `Cannot map <${part.tag}> back to the HTML. Click the text inside it instead.` };
     }
     const loc = original.sourceCodeLocation!;
@@ -312,4 +316,48 @@ export function applyHtmlCompositeEdit(
   s.overwrite(regionStart, regionEnd, lead + out.join("") + trail);
   fs.writeFileSync(abs, s.toString());
   return { ok: true, file: edit.file, line: edit.line };
+}
+
+function htmlOwnLine(html: string, start: number, end: number) {
+  let ls = start;
+  while (ls > 0 && html[ls - 1] !== "\n") ls--;
+  let le = end;
+  while (le < html.length && html[le] !== "\n") le++;
+  const own = /^\s*$/.test(html.slice(ls, start)) && /^\s*$/.test(html.slice(end, le));
+  return {
+    start: own ? ls : start,
+    end: own ? Math.min(le + 1, html.length) : end,
+    indent: html.slice(ls, start).match(/^\s*/)![0],
+    own,
+  };
+}
+
+export function duplicateHtmlElement(root: string, op: { file?: string; line?: number; column?: number }) {
+  if (!op.file || op.line == null || op.column == null) return { ok: false as const, message: "Element not found." };
+  const abs = path.resolve(root, op.file);
+  const html = fs.readFileSync(abs, "utf8");
+  const el = elementAt(html, op.line, op.column);
+  if (!el) return { ok: false as const, message: "Element not found in the HTML." };
+  const loc = el.sourceCodeLocation!;
+  const src = html.slice(loc.startOffset, loc.endOffset);
+  const line = htmlOwnLine(html, loc.startOffset, loc.endOffset);
+  const s = new MagicString(html);
+  if (line.own) s.appendLeft(line.end, line.indent + src + "\n");
+  else s.appendLeft(loc.endOffset, src);
+  fs.writeFileSync(abs, s.toString());
+  return { ok: true as const, file: op.file, line: op.line };
+}
+
+export function deleteHtmlElement(root: string, op: { file?: string; line?: number; column?: number }) {
+  if (!op.file || op.line == null || op.column == null) return { ok: false as const, message: "Element not found." };
+  const abs = path.resolve(root, op.file);
+  const html = fs.readFileSync(abs, "utf8");
+  const el = elementAt(html, op.line, op.column);
+  if (!el) return { ok: false as const, message: "Element not found in the HTML." };
+  const loc = el.sourceCodeLocation!;
+  const line = htmlOwnLine(html, loc.startOffset, loc.endOffset);
+  const s = new MagicString(html);
+  s.remove(line.start, line.end);
+  fs.writeFileSync(abs, s.toString());
+  return { ok: true as const, file: op.file, line: op.line };
 }

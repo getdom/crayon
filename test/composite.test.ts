@@ -82,3 +82,26 @@ describe("composite text", () => {
     );
   });
 });
+
+describe("formatting added in the page", () => {
+  it("writes a new <strong> in JSX and in HTML", () => {
+    file("a.tsx", `const a = <p className="x">Ship faster with fewer meetings.</p>;`);
+    const r = applyCompositeEdit(root, {
+      file: "a.tsx",
+      line: 1,
+      column: 10,
+      parts: [{ text: "Ship faster with " }, { tag: "strong", text: "fewer meetings" }, { text: "." }],
+    });
+    expect(r.ok).toBe(true);
+    expect(read("a.tsx")).toBe(`const a = <p className="x">Ship faster with <strong>fewer meetings</strong>.</p>;`);
+    file("index.html", `<p>Ship faster with fewer meetings.</p>`);
+    const h = applyHtmlCompositeEdit(root, {
+      file: "index.html",
+      line: 1,
+      column: 0,
+      parts: [{ text: "Ship faster with " }, { tag: "em", text: "fewer" }, { text: " meetings." }],
+    });
+    expect(h.ok).toBe(true);
+    expect(read("index.html")).toBe(`<p>Ship faster with <em>fewer</em> meetings.</p>`);
+  });
+});

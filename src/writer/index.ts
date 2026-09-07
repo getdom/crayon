@@ -427,3 +427,41 @@ function endsWith(keyPath: string[], tail: string[]): boolean {
   if (tail.length > keyPath.length) return false;
   return tail.every((k, i) => keyPath[keyPath.length - tail.length + i] === k);
 }
+
+/** How many places in code and content files carry this exact text. */
+export function countOccurrences(root: string, text: string): { code: number; data: number } {
+  const t = normalize(text);
+  if (!t) return { code: 0, data: 0 };
+  return { code: searchText(root, t).length, data: searchDataFiles(root, text.trim()).length };
+}
+
+/** Replace every exact occurrence, in code (all tiers) and content files. Returns the files touched. */
+export function replaceEverywhere(
+  root: string,
+  oldText: string,
+  newText: string,
+): { ok: true; files: string[]; count: number } | { ok: false; message: string } {
+  const t = normalize(oldText);
+  if (!t) return { ok: false, message: "Empty text." };
+  const hits = searchText(root, t);
+  const data = searchDataFiles(root, oldText.trim());
+  if (!hits.length && !data.length) return { ok: false, message: "No occurrence found." };
+  // Group code hits by file and rewrite each file once, from the end so offsets stay valid.
+  const byFile = new Map<string, TextSlot[]>();
+  for (const h of hits) byFile.set(h.file, [...(byFile.get(h.file) ?? []), h]);
+  const files: string[] = [];
+  for (const [file, slots] of byFile) {
+    const code = fs.readFileSync(file, "utf8");
+    const s = new MagicString(code);
+    for (const slot of slots) s.overwrite(slot.start, slot.end, replacement(slot, newText));
+    fs.writeFileSync(file, s.toString());
+    files.push(path.relative(root, file).split(path.sep).join("/"));
+  }
+  const dataByFile = new Map<string, typeof data>();
+  for (const d of data) dataByFile.set(d.file, [...(dataByFile.get(d.file) ?? []), d]);
+  for (const [file, ds] of dataByFile) {
+    for (const d of [...ds].sort((a, b) => b.start - a.start)) applyDataEdit(d, newText);
+    files.push(path.relative(root, file).split(path.sep).join("/"));
+  }
+  return { ok: true, files: [...new Set(files)], count: hits.length + data.length };
+}

@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Bold and italic on a selection: select words, press ⌘B or ⌘I (or the B / I buttons). Writes `<strong>` / `<em>` into the JSX or HTML, unwraps on a second press.
+- Background colour in the style bar, same palette as text colour.
+- Duplicate and Delete for the selected element, on its own line when it has one. Undo brings it back.
+- After editing a text that exists elsewhere, an offer to replace it everywhere: code, props, dictionaries and content files.
+
+### Fixed
+
+- `bin` field normalised so npm keeps the `crayon` command in the published package.
+
 ## [0.3.1] - 2026-09-07
 
 ### Added

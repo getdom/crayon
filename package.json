@@ -17,13 +17,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/getdom/crayon"
+    "url": "git+https://github.com/getdom/crayon.git"
   },
   "license": "MIT",
   "author": "Dominique Giancani <dom@fabriquestudio.fr>",
   "type": "module",
   "bin": {
-    "crayon": "./dist/cli.js"
+    "crayon": "dist/cli.js"
   },
   "exports": {
     ".": {

@@ -6,6 +6,12 @@ import { replaceImage, setAlt, type ImageRequest, type FileSnapshot } from "./im
 import { applyClassEdit, type ClassEdit } from "../writer/classes.js";
 import { applyHtmlTextEdit, applyHtmlClassEdit, applyHtmlCompositeEdit } from "../static/html.js";
 import { applyCompositeEdit, type CompositeEdit } from "../writer/composite.js";
+import { duplicateElement, deleteElement, type ElementOp } from "../writer/elements.js";
+import { duplicateHtmlElement, deleteHtmlElement } from "../static/html.js";
+import { countOccurrences, replaceEverywhere } from "../writer/index.js";
+import { listSourceFiles } from "../writer/files.js";
+import { listDataFiles } from "../writer/data.js";
+const require_files = () => ({ listSourceFiles });
 import { publish as gitPublish, gitInfo, type GitInfo } from "./git.js";
 
 const isHtml = (file?: string) => !!file && file.toLowerCase().endsWith(".html");
@@ -117,6 +123,81 @@ export class EditSession {
       console.log(`${pc.red("✗")} ${result.message}`);
     }
     return result;
+  }
+
+  element(kind: "duplicate" | "delete", op: ElementOp) {
+    const abs = op.file ? path.resolve(this.root, op.file) : null;
+    const before = abs ? this.snap(abs) : null;
+    const html = isHtml(op.file) || this.isStatic;
+    const result =
+      kind === "duplicate"
+        ? html
+          ? duplicateHtmlElement(this.root, op)
+          : duplicateElement(this.root, op)
+        : html
+          ? deleteHtmlElement(this.root, op)
+          : deleteElement(this.root, op);
+    if (result.ok) {
+      if (before) this.history.push({ label: `${result.file}:${result.line}`, snapshots: [before] });
+      if (abs) this.track(abs, `${result.file}:${result.line} ${kind}`);
+      console.log(`${pc.green(kind === "duplicate" ? "⧉" : "⌫")} ${pc.bold(result.file)}:${result.line}  ${kind}`);
+    } else {
+      console.log(`${pc.red("✗")} ${result.message}`);
+    }
+    return result;
+  }
+
+  /** Other places (code + content) carrying the same text, for the "replace everywhere" offer. */
+  occurrences(text: string): number {
+    const c = countOccurrences(this.root, text);
+    return c.code + c.data;
+  }
+
+  replaceAll(oldText: string, newText: string) {
+    const c = countOccurrences(this.root, oldText);
+    const snaps: FileSnapshot[] = [];
+    // snapshot every source and content file that contains the text
+    for (const file of [...new Set([...this.filesContaining(oldText)])]) {
+      const snap = this.snap(file);
+      if (snap) snaps.push(snap);
+    }
+    const result = replaceEverywhere(this.root, oldText, newText);
+    if (result.ok) {
+      this.history.push({
+        label: `replace in ${result.files.length} files`,
+        snapshots: snaps.filter((s) =>
+          result.files.includes(path.relative(this.root, s.path).split(path.sep).join("/")),
+        ),
+      });
+      for (const rel of result.files)
+        this.track(
+          path.resolve(this.root, rel),
+          `${rel} "${oldText.slice(0, 40)}" → "${newText.slice(0, 40)}" (everywhere)`,
+        );
+      console.log(
+        `${pc.green("✎")} ${result.count} occurrences in ${result.files.join(", ")}  ${pc.dim(JSON.stringify(oldText))} → ${JSON.stringify(newText)}`,
+      );
+    } else {
+      console.log(`${pc.red("✗")} ${result.message}`);
+    }
+    return { ...result, expected: c.code + c.data };
+  }
+
+  private filesContaining(text: string): string[] {
+    const { listSourceFiles } = require_files();
+    const out: string[] = [];
+    const needle = text.trim().slice(0, 24);
+    for (const f of listSourceFiles(this.root)) {
+      try {
+        if (fs.readFileSync(f, "utf8").includes(needle)) out.push(f);
+      } catch {}
+    }
+    for (const f of listDataFiles(this.root)) {
+      try {
+        if (fs.readFileSync(f, "utf8").includes(needle)) out.push(f);
+      } catch {}
+    }
+    return out;
   }
 
   get size() {
