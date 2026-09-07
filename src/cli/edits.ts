@@ -11,6 +11,7 @@ import { duplicateHtmlElement, deleteHtmlElement } from "../static/html.js";
 import { countOccurrences, replaceEverywhere } from "../writer/index.js";
 import { listSourceFiles } from "../writer/files.js";
 import { componentProps, setProp } from "../writer/props.js";
+import { setCssProperty, listCssFiles, type CssEdit } from "../writer/css.js";
 import { listDataFiles } from "../writer/data.js";
 const require_files = () => ({ listSourceFiles });
 import { publish as gitPublish, gitInfo, type GitInfo } from "./git.js";
@@ -215,6 +216,27 @@ export class EditSession {
       this.track(abs, `${result.file}:${result.line} ${name}=${value ?? "(removed)"}`);
       console.log(
         `${pc.green("🎨")} ${pc.bold(result.file)}:${result.line}  ${name}=${value === null ? pc.dim("removed") : JSON.stringify(value)}`,
+      );
+    } else {
+      console.log(`${pc.red("✗")} ${result.message}`);
+    }
+    return result;
+  }
+
+  css(edit: CssEdit) {
+    const snaps = new Map<string, FileSnapshot>();
+    for (const f of listCssFiles(this.root)) {
+      const snap = this.snap(f);
+      if (snap) snaps.set(f, snap);
+    }
+    const result = setCssProperty(this.root, edit);
+    if (result.ok) {
+      const abs = path.resolve(this.root, result.file);
+      const before = snaps.get(abs);
+      if (before) this.history.push({ label: `${result.file}:${result.line}`, snapshots: [before] });
+      this.track(abs, `${result.file}:${result.line} ${result.selector} { ${edit.prop}: ${edit.value} }`);
+      console.log(
+        `${pc.green("🎨")} ${pc.bold(result.file)}:${result.line}  ${result.selector} { ${edit.prop}: ${edit.value} }${result.how === "added" ? pc.dim("  (added)") : ""}`,
       );
     } else {
       console.log(`${pc.red("✗")} ${result.message}`);

@@ -100,6 +100,10 @@ When the same text appears in several places, Crayon uses the expression that re
 - Imported assets (`import hero from "./hero.png"`): the file is replaced on disk, the code does not move.
 - Paths stored in content files (frontmatter, JSON) are updated there.
 
+**Styles**, on plain CSS projects
+
+- Size, weight, italic, text colour, background and radius, written into the CSS rule that styles the element: `.btn--primary { background: var(--blue) }` becomes `background: var(--ink)`. Crayon picks the most specific rule that already sets the property, otherwise the most specific class rule, and never a media query. Colours are the project's `:root` variables, or any CSS colour typed by hand.
+
 **Styles**, on Tailwind projects
 
 - Size, weight, italic, text and background colour, font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`. Padding and radius on buttons, links and badges.
@@ -202,7 +206,7 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md). The short version:
 - **"This text is not written as-is in the code"**: the text is computed. The message names the file and line that renders it.
 - **Port 4400 busy**: Crayon picks the next free one and says so.
 - **Nothing is tagged (hover shows nothing)**: the config line is missing or the dev server was started without Crayon. Run `npx crayon-dev`, not `npm run dev`.
-- **The style bar is missing**: the project has no Tailwind, or the text is rendered by a component whose classes live elsewhere.
+- **The style bar is missing**: the text is rendered by a component whose classes live elsewhere. On plain CSS sites, "No CSS rule matches" means the element is styled by a selector Crayon does not read, such as an attribute selector or an inline style.
 
 ## Contributing
 

@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-07
+
+### Added
+
+- Plain CSS projects get a style bar too: size, weight, bold/italic on a selection, text colour, background, radius, duplicate and delete. Crayon finds the CSS rule that styles the element, the most specific matching rule that already sets the property, otherwise the most specific matching class rule, and rewrites or adds the declaration. Media-query rules are never chosen for a base style. Colours come from the project's `:root` variables, written as `var(--name)`, or any CSS colour typed by hand.
+
 ## [0.4.0] - 2026-09-07
 
 ### Added

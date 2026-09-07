@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { listFiles } from "../writer/files.js";
+import { readCssVars } from "../writer/css.js";
 
 export interface Theme {
   /** 3, 4, or null when Tailwind is not installed. */
@@ -12,6 +13,8 @@ export interface Theme {
   paletteColors: Record<string, string>;
   /** Font families available as `font-<name>` classes: name → CSS value. */
   fonts: Record<string, string>;
+  /** Plain CSS projects: custom properties declared on :root, name → value. */
+  cssVars: Record<string, string>;
 }
 
 function readVars(css: string, prefix: string, out: Record<string, string>) {
@@ -52,7 +55,10 @@ function themeBlocks(css: string): string {
 }
 
 export function readTheme(root: string): Theme {
-  const theme: Theme = { tailwind: null, projectColors: {}, paletteColors: {}, fonts: {} };
+  const theme: Theme = { tailwind: null, projectColors: {}, paletteColors: {}, fonts: {}, cssVars: {} };
+  try {
+    theme.cssVars = readCssVars(root);
+  } catch {}
   const require = createRequire(path.join(root, "package.json"));
   let pkgDir: string | null = null;
   try {

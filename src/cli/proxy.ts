@@ -171,6 +171,25 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
             pending: opts.session.pendingCount,
           }),
         );
+      } else if (msg.type === "css") {
+        const result = opts.session.css({
+          el: {
+            tag: String(msg.tag ?? "div"),
+            id: msg.elementId ? String(msg.elementId) : undefined,
+            classes: Array.isArray(msg.classes) ? msg.classes.map(String) : [],
+          },
+          prop: String(msg.prop),
+          value: String(msg.value),
+        });
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
       } else if (msg.type === "props") {
         const result = opts.session.props({
           file: msg.file,

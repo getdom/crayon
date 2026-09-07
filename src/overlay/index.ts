@@ -136,6 +136,7 @@ class Overlay {
     projectColors: Record<string, string>;
     paletteColors: Record<string, string>;
     fonts: Record<string, string>;
+    cssVars?: Record<string, string>;
   } | null = null;
   /** Class changes staged while editing; written on commit. */
   staged = { remove: new Set<string>(), add: new Set<string>() };
@@ -844,7 +845,11 @@ class Overlay {
 
   openStyleBar(el: HTMLElement) {
     const t = this.theme;
-    if (!t || !t.tailwind) return;
+    if (!t) return;
+    if (!t.tailwind) {
+      this.openCssBar(el);
+      return;
+    }
     const bar = this.styleBar;
     bar.innerHTML = "";
     if (!el.hasAttribute(ATTR)) {
@@ -1094,6 +1099,197 @@ class Overlay {
       this.styleBar.append(sel);
     }
     this.placeStyleBar(el);
+  }
+
+  /* ---------- plain CSS projects: edit the rule that styles the element ---------- */
+  static CSS_SIZES = ["12px", "14px", "16px", "18px", "20px", "24px", "28px", "32px", "40px", "48px", "56px", "64px"];
+  static CSS_RADII = ["0", "4px", "6px", "8px", "12px", "16px", "24px", "999px"];
+
+  cssDesc(el: HTMLElement) {
+    return {
+      tag: el.tagName.toLowerCase(),
+      elementId: el.id || undefined,
+      classes: [...el.classList].filter((c) => !/^(is-|has-)/.test(c)),
+    };
+  }
+
+  async cssSet(el: HTMLElement, prop: string, value: string, preview?: string) {
+    el.style.setProperty(prop, preview ?? value);
+    const r = await this.send({ type: "css", ...this.cssDesc(el), prop, value });
+    if (r.ok) this.say(`✓ ${r.selector} · ${r.file}:${r.line}${r.how === "added" ? " (added)" : ""}`, "ok");
+    else {
+      el.style.removeProperty(prop);
+      this.say(`✗ ${r.message}`, "err", 8000);
+    }
+  }
+
+  /** Colour-like :root variables of the project, resolved for swatches. */
+  cssColorVars(): { name: string; value: string }[] {
+    const vars = this.theme?.cssVars ?? {};
+    const root = getComputedStyle(document.documentElement);
+    const out: { name: string; value: string }[] = [];
+    for (const [name, raw] of Object.entries(vars)) {
+      const v = root.getPropertyValue(`--${name}`).trim() || raw;
+      if (/^(#|rgb|hsl|oklch|oklab|color\()/i.test(v) || /^[a-z]+$/i.test(v)) out.push({ name, value: v });
+    }
+    return out;
+  }
+
+  openCssBar(el: HTMLElement) {
+    const bar = this.styleBar;
+    bar.innerHTML = "";
+    if (!el.hasAttribute(ATTR)) {
+      const note = document.createElement("span");
+      note.className = "muted";
+      note.textContent = "Styles live in the component that renders this text";
+      bar.append(note);
+      bar.classList.add("open");
+      this.placeStyleBar(el);
+      return;
+    }
+    const cs = getComputedStyle(el);
+    const select = (label: string, options: string[], value: string, onChange: (v: string) => void) => {
+      const sel = document.createElement("select");
+      sel.title = label;
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = label;
+      sel.append(empty);
+      for (const o of options) {
+        const opt = document.createElement("option");
+        opt.value = o;
+        opt.textContent = o;
+        sel.append(opt);
+      }
+      sel.value = options.includes(value) ? value : "";
+      sel.addEventListener("change", () => sel.value && onChange(sel.value));
+      return sel;
+    };
+    bar.append(
+      select("Size", Overlay.CSS_SIZES, Math.round(parseFloat(cs.fontSize)) + "px", (v) =>
+        this.cssSet(el, "font-size", v),
+      ),
+      select("Weight", ["300", "400", "500", "600", "700", "800"], cs.fontWeight, (v) =>
+        this.cssSet(el, "font-weight", v),
+      ),
+    );
+    const bold = document.createElement("button");
+    bold.className = "tog";
+    bold.textContent = "B";
+    bold.title = "Bold the selected words (⌘B)";
+    bold.addEventListener("click", () => {
+      if (!this.formatSelection(el, "strong"))
+        this.say("Select some words first, or change the weight of the whole text", "", 3000);
+    });
+    const italic = document.createElement("button");
+    italic.className = "tog i" + (cs.fontStyle === "italic" ? " on" : "");
+    italic.textContent = "I";
+    italic.title = "Italic: the selected words (⌘I), or the whole text";
+    italic.addEventListener("click", () => {
+      if (this.formatSelection(el, "em")) return;
+      const on = !italic.classList.contains("on");
+      italic.classList.toggle("on", on);
+      this.cssSet(el, "font-style", on ? "italic" : "normal");
+    });
+    const colorBtn = (label: string, prop: "color" | "background-color") => {
+      const b = document.createElement("button");
+      const dot = document.createElement("span");
+      dot.className = "swatch";
+      dot.style.background = prop === "color" ? cs.color : cs.backgroundColor;
+      b.append(dot, document.createTextNode(label));
+      b.title = label;
+      b.addEventListener("click", () =>
+        this.toggleCssSwatches(el, prop, (value, shown) => {
+          dot.style.background = shown;
+          b.replaceChildren(dot, document.createTextNode(value.startsWith("var(") ? value.slice(6, -1) : value));
+        }),
+      );
+      return b;
+    };
+    bar.append(bold, italic, colorBtn("Color", "color"), colorBtn("Background", "background-color"));
+    if (/^(A|BUTTON|SPAN|LI|DIV|LABEL)$/.test(el.tagName)) {
+      bar.append(select("Radius", Overlay.CSS_RADII, cs.borderRadius, (v) => this.cssSet(el, "border-radius", v)));
+    }
+    const sep = document.createElement("span");
+    sep.className = "sep";
+    const dup = document.createElement("button");
+    dup.textContent = "Duplicate";
+    dup.addEventListener("click", () => this.elementOp(el, "duplicate"));
+    const del = document.createElement("button");
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => this.elementOp(el, "delete"));
+    bar.append(sep, dup, del);
+    for (const b of bar.querySelectorAll("button")) b.addEventListener("mousedown", (e) => e.preventDefault());
+    bar.classList.add("open");
+    this.placeStyleBar(el);
+  }
+
+  toggleCssSwatches(
+    el: HTMLElement,
+    prop: "color" | "background-color",
+    onPick: (value: string, shown: string) => void,
+  ) {
+    const sw = this.swatches;
+    if (sw.classList.contains("open")) {
+      sw.classList.remove("open");
+      return;
+    }
+    sw.innerHTML = "";
+    const pick = (value: string, shown: string) => {
+      this.cssSet(el, prop, value, shown);
+      onPick(value, shown);
+      sw.classList.remove("open");
+    };
+    const vars = this.cssColorVars();
+    if (vars.length) {
+      const h = document.createElement("h4");
+      h.textContent = "Your variables";
+      const named = document.createElement("div");
+      named.className = "named";
+      for (const { name, value } of vars) {
+        const b = document.createElement("button");
+        b.className = "n";
+        const i = document.createElement("i");
+        i.style.background = value;
+        b.append(i, document.createTextNode(name));
+        b.addEventListener("click", () => pick(`var(--${name})`, value));
+        named.append(b);
+      }
+      sw.append(h, named);
+    }
+    const h2 = document.createElement("h4");
+    h2.textContent = "Custom";
+    const row = document.createElement("div");
+    row.style.cssText = "display: flex; gap: 6px;";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "#1b4dff, rgb(…), any CSS colour";
+    input.style.cssText =
+      "all: unset; box-sizing: border-box; flex: 1; height: 28px; padding: 0 8px; border-radius: 6px; background: #26262c; color: #f4f4f5; font: 12.5px -apple-system, BlinkMacSystemFont, Inter, sans-serif;";
+    const ok = document.createElement("button");
+    ok.className = "n";
+    ok.textContent = "Apply";
+    const apply = () => {
+      const v = input.value.trim();
+      if (!v || !CSS.supports("color", v)) {
+        this.say("That is not a valid CSS colour", "err", 3000);
+        return;
+      }
+      pick(v, v);
+    };
+    ok.addEventListener("click", apply);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") apply();
+      e.stopPropagation();
+    });
+    row.append(input, ok);
+    sw.append(h2, row);
+    for (const b of sw.querySelectorAll("button")) b.addEventListener("mousedown", (e) => e.preventDefault());
+    const r = this.styleBar.getBoundingClientRect();
+    sw.style.top = `${r.bottom + 6}px`;
+    sw.style.left = `${Math.min(r.left, window.innerWidth - 316)}px`;
+    sw.classList.add("open");
   }
 
   placeStyleBar(el: Element) {

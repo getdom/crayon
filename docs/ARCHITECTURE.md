@@ -82,6 +82,10 @@ The lowest tier with hits is kept. One hit is the answer. Several hits are narro
 - **Mixed content** (`src/writer/composite.ts`, `applyHtmlCompositeEdit`): the overlay serialises the edited element as parts, text or `{ tag, locator, text }`. The writer takes the element at the locator (or, when the element is rendered by a component, the parent of a tagged child), checks that every original child is static (text, string literal, inline host element), then rebuilds the children region: text parts encoded, element parts copied from their original source with only their inner text replaced. A part it cannot map back is a refusal, never a guess.
 - **Publish** (`src/cli/git.ts`): the session keeps the list of files it wrote and a one-line summary per edit. Publish runs `git add` on those files only, `git commit` with a title and a bulleted body, then `git push` when `@{u}` exists. It uses the repository's git identity and adds no trailer. On success the pending list and the undo stack are cleared; undoing across a commit would silently diverge from what was pushed.
 
+## 7. Plain CSS
+
+`src/writer/css.ts` is a small CSS reader: top-level and nested rules (`@media`, `@supports`, `@layer`, `@container`) with their declarations and offsets. To change a property on an element, the overlay sends the tag, id and classes; the writer keeps every rule whose last compound matches (pseudo-classes and pseudo-elements excluded, so `:hover` rules are never touched), ranks base rules above nested ones, then by specificity, then by source order, and either rewrites the value of the existing declaration (shorthand `background` counts for `background-color`, `!important` is kept) or appends `prop: value;` to the best class rule with the file's indentation. The theme endpoint exposes the `:root` custom properties so the swatches offer `var(--name)` first.
+
 ## Why these choices
 
 - **TypeScript everywhere.** Bundler loaders and Vite plugins are JavaScript by construction, Babel is the reference parser for JSX, and the user already has Node. A Go or Rust binary would add an install step and gain nothing: parsing one file takes milliseconds.
