@@ -243,6 +243,8 @@ const INLINE_HTML = new Set([
   "kbd",
   "abbr",
   "time",
+  "svg",
+  "img",
 ]);
 
 type HtmlPart = { text: string } | { tag: string; locator?: string; text: string; void?: boolean };
@@ -293,7 +295,7 @@ export function applyHtmlCompositeEdit(
     }
     const loc = original.sourceCodeLocation!;
     let src = html.slice(loc.startOffset, loc.endOffset);
-    if (!part.void && loc.endTag) {
+    if (!part.void && loc.endTag && original.tagName !== "svg") {
       const r = textRange(original);
       if (r === "composite")
         return { ok: false, message: `The text inside <${part.tag}> is not plain. Click it directly.` };

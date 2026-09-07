@@ -171,6 +171,31 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
             pending: opts.session.pendingCount,
           }),
         );
+      } else if (msg.type === "props") {
+        const result = opts.session.props({
+          file: msg.file,
+          line: msg.line,
+          column: msg.column,
+          ancestors: Array.isArray(msg.ancestors) ? msg.ancestors.slice(0, 40) : [],
+          oldText: String(msg.oldText ?? ""),
+          newText: String(msg.oldText ?? ""),
+        });
+        ws.send(JSON.stringify({ type: "result", id: msg.id, ...result }));
+      } else if (msg.type === "prop") {
+        const result = opts.session.prop(
+          { file: String(msg.file), line: Number(msg.line), column: Number(msg.column) },
+          String(msg.name),
+          msg.value === null ? null : String(msg.value),
+        );
+        ws.send(
+          JSON.stringify({
+            type: "result",
+            id: msg.id,
+            ...result,
+            history: opts.session.size,
+            pending: opts.session.pendingCount,
+          }),
+        );
       } else if (msg.type === "element") {
         const result = opts.session.element(msg.kind === "delete" ? "delete" : "duplicate", {
           file: msg.file,

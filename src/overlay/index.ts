@@ -361,8 +361,9 @@ class Overlay {
   /** Text mixed with inline elements (bold, links, line breaks) whose children are plain text. */
   isComposite(el: Element): boolean {
     if (!(el instanceof HTMLElement) || el.childElementCount === 0) return false;
-    if (/^(A|BUTTON|UL|OL|TABLE|SECTION|NAV|HEADER|FOOTER|FORM|IMG|SVG)$/.test(el.tagName)) return false;
+    if (/^(UL|OL|TABLE|SECTION|NAV|HEADER|FOOTER|FORM|IMG|SVG|svg)$/.test(el.tagName)) return false;
     for (const c of el.children) {
+      if (c.tagName.toLowerCase() === "svg") continue; // icons travel with the text, untouched
       if (!Overlay.INLINE.has(c.tagName)) return false;
       if (c.tagName !== "BR" && c.childElementCount > 0) return false;
     }
@@ -377,11 +378,12 @@ class Overlay {
         const t = node.textContent ?? "";
         if (t) parts.push({ text: t });
       } else if (node instanceof Element) {
+        const tag = node.tagName.toLowerCase();
         parts.push({
-          tag: node.tagName.toLowerCase(),
+          tag,
           locator: node.getAttribute(ATTR) ?? undefined,
-          text: node.textContent ?? "",
-          void: node.tagName === "BR",
+          text: tag === "svg" ? "" : (node.textContent ?? ""),
+          void: node.tagName === "BR" || tag === "svg",
         });
       }
     }
@@ -848,10 +850,11 @@ class Overlay {
     if (!el.hasAttribute(ATTR)) {
       const note = document.createElement("span");
       note.className = "muted";
-      note.textContent = "Styles live in the component that renders this text";
+      note.textContent = "Looking up the component…";
       bar.append(note);
       bar.classList.add("open");
       this.placeStyleBar(el);
+      this.loadComponentProps(el, note);
       return;
     }
     const classes = [...el.classList];
@@ -1036,6 +1039,61 @@ class Overlay {
     });
     this.bar.insertBefore(btn, this.undoBtn);
     window.setTimeout(() => btn.remove(), 15000);
+  }
+
+  /** For text rendered by a component (<Button>), offer its cva variants as selects. */
+  async loadComponentProps(el: HTMLElement, note: HTMLElement) {
+    const r = await this.send({
+      type: "props",
+      ...(this.locatorOf(el) ?? {}),
+      ancestors: this.ancestorsOf(el),
+      oldText: el.textContent ?? "",
+    });
+    if (this.editing !== el) return;
+    const groups = r.ok ? Object.entries(r.options as Record<string, string[]>) : [];
+    if (!r.ok || groups.length === 0) {
+      note.textContent = r.ok
+        ? `<${r.component}> has no variants to pick from`
+        : "Styles live in the component that renders this text";
+      this.placeStyleBar(el);
+      return;
+    }
+    note.remove();
+    const label = document.createElement("span");
+    label.className = "muted";
+    label.textContent = `<${r.component}>`;
+    this.styleBar.append(label);
+    for (const [name, values] of groups) {
+      const sel = document.createElement("select");
+      sel.title = name;
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = name;
+      sel.append(empty);
+      for (const v of values) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        sel.append(o);
+      }
+      sel.value = r.current?.[name] ?? "";
+      sel.addEventListener("change", async () => {
+        const res = await this.send({
+          type: "prop",
+          file: r.file,
+          line: r.line,
+          column: r.column,
+          name,
+          value: sel.value || null,
+        });
+        this.say(
+          res.ok ? `✓ ${name}=${sel.value || "default"} · ${res.file}:${res.line}` : `✗ ${res.message}`,
+          res.ok ? "ok" : "err",
+        );
+      });
+      this.styleBar.append(sel);
+    }
+    this.placeStyleBar(el);
   }
 
   placeStyleBar(el: Element) {

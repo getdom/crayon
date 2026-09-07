@@ -105,3 +105,19 @@ describe("formatting added in the page", () => {
     expect(read("index.html")).toBe(`<p>Ship faster with <em>fewer</em> meetings.</p>`);
   });
 });
+
+describe("buttons with icons", () => {
+  it("keeps an icon component in place while the label changes", () => {
+    file("a.tsx", `const a = <Button size="sm">\n  <Download className="size-4" /> Export CSV\n</Button>;`);
+    const r = applyCompositeEdit(root, {
+      file: "a.tsx",
+      line: 1,
+      column: 10,
+      parts: [{ tag: "svg", text: "", void: true }, { text: " Export as CSV" }],
+    });
+    expect(r.ok).toBe(true);
+    expect(read("a.tsx")).toBe(
+      `const a = <Button size="sm">\n  <Download className="size-4" /> Export as CSV\n</Button>;`,
+    );
+  });
+});

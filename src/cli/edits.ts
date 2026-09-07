@@ -10,6 +10,7 @@ import { duplicateElement, deleteElement, type ElementOp } from "../writer/eleme
 import { duplicateHtmlElement, deleteHtmlElement } from "../static/html.js";
 import { countOccurrences, replaceEverywhere } from "../writer/index.js";
 import { listSourceFiles } from "../writer/files.js";
+import { componentProps, setProp } from "../writer/props.js";
 import { listDataFiles } from "../writer/data.js";
 const require_files = () => ({ listSourceFiles });
 import { publish as gitPublish, gitInfo, type GitInfo } from "./git.js";
@@ -198,6 +199,27 @@ export class EditSession {
       } catch {}
     }
     return out;
+  }
+
+  props(edit: TextEdit) {
+    if (this.isStatic) return { ok: false as const, message: "No components on a plain HTML site." };
+    return componentProps(this.root, edit);
+  }
+
+  prop(loc: { file: string; line: number; column: number }, name: string, value: string | null) {
+    const abs = path.resolve(this.root, loc.file);
+    const before = this.snap(abs);
+    const result = setProp(this.root, loc, name, value);
+    if (result.ok) {
+      if (before) this.history.push({ label: `${result.file}:${result.line}`, snapshots: [before] });
+      this.track(abs, `${result.file}:${result.line} ${name}=${value ?? "(removed)"}`);
+      console.log(
+        `${pc.green("🎨")} ${pc.bold(result.file)}:${result.line}  ${name}=${value === null ? pc.dim("removed") : JSON.stringify(value)}`,
+      );
+    } else {
+      console.log(`${pc.red("✗")} ${result.message}`);
+    }
+    return result;
   }
 
   get size() {

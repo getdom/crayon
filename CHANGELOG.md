@@ -4,8 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-07
+
 ### Added
 
+- Component variants: when the text you click is rendered by a component built with `cva()` (a shadcn `<Button>`), the style bar shows its variant groups (`variant`, `size`) as selects and writes the prop on the component element in the parent file.
+- Buttons and labels with an icon (`<Download /> Export CSV`) are editable; the icon keeps its place.
 - Bold and italic on a selection: select words, press ⌘B or ⌘I (or the B / I buttons). Writes `<strong>` / `<em>` into the JSX or HTML, unwraps on a second press.
 - Background colour in the style bar, same palette as text colour.
 - Duplicate and Delete for the selected element, on its own line when it has one. Undo brings it back.
@@ -14,6 +18,11 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - `bin` field normalised so npm keeps the `crayon` command in the published package.
+- Text next to an icon or a link is now indexed on its own, so it is found by the text search.
+
+### Verified
+
+- Vite 8 + React 19 (`npm create vite` template): config patched, page tagged, edits written to `App.tsx`.
 
 ## [0.3.1] - 2026-09-07
 

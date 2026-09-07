@@ -85,7 +85,8 @@ Every write is echoed in the terminal with the file and line:
 **Text**
 
 - Written between JSX tags: `<h1>Hello</h1>`, including multi-line text with indentation preserved, or a single word inside a longer text.
-- Mixed with inline markup: `Hello <b>world</b>, see <a href="/x">this</a>` is edited as one unit; bold, links and line breaks keep their attributes.
+- Mixed with inline markup: `Hello <b>world</b>, see <a href="/x">this</a>` is edited as one unit; bold, links and line breaks keep their attributes. Buttons with an icon too.
+- The same text elsewhere: after an edit, Crayon offers to replace it in the other places it found, code and content files alike.
 - Passed through a component: `<Button>Book a call</Button>`, found by searching the project for that exact string.
 - Passed as a prop: `<Field label="Surface">`, `<Card title="Pricing">`.
 - Inside a JSX expression: `{isPro ? "Pro plan" : "Free plan"}`.
@@ -101,7 +102,8 @@ When the same text appears in several places, Crayon uses the expression that re
 
 **Styles**, on Tailwind projects
 
-- Size, weight, italic, text colour and font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`. Padding and radius on buttons, links and badges.
+- Size, weight, italic, text and background colour, font family, as a swap of one class for another: `text-gray-500` becomes `text-primary`. Padding and radius on buttons, links and badges.
+- Component variants: a shadcn `<Button>` exposes its `variant` and `size` groups, read from its `cva()` definition, and the prop is written on the `<Button>` in the parent file.
 - The palette is read from your project: your theme's colours first (shadcn tokens, brand colours), then Tailwind's default palette. Fonts are the ones your theme declares.
 - Works inside `cn()` and `clsx()` calls. Refused, with the reason, when styles come from a CSS module or a variant function.
 
@@ -187,9 +189,9 @@ crayon [dir] [options]
 
 In order. Each step ships when it works on real sites, not before.
 
-1. **Background colours** and button variants in the style bar.
-2. **Hosted publish** for clients without a terminal: an agency connects the repo, the client edits from a URL.
-3. **Agent hand-off**: when a text is computed, send the exact file, line and intent to a coding agent.
+1. **Hosted publish** for clients without a terminal: an agency connects the repo, the client edits from a URL.
+2. **Agent hand-off**: when a text is computed, send the exact file, line and intent to a coding agent.
+3. **Mac app**: drop a folder, no terminal.
 
 Not planned: drag-and-drop layout, component creation, anything that makes Crayon a design tool.
 

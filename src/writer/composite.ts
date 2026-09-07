@@ -98,15 +98,26 @@ export function applyCompositeEdit(root: string, edit: CompositeEdit): Composite
     ) {
       continue;
     }
+    // Icon components (<Download className="size-4" />): opaque, kept in order.
+    if (
+      c.type === "JSXElement" &&
+      c.openingElement.name.type === "JSXIdentifier" &&
+      /^[A-Z]/.test(c.openingElement.name.name) &&
+      c.children.length === 0
+    ) {
+      continue;
+    }
     return {
       ok: false,
       message: "This text mixes dynamic values or components. Click a single piece of text instead.",
     };
   }
   const childByPos = new Map<string, any>();
+  const opaque: any[] = [];
   for (const c of el.children) {
     if (c.type === "JSXElement") {
       childByPos.set(`${c.openingElement.loc.start.line}:${c.openingElement.loc.start.column}`, c);
+      if (/^[A-Z]/.test(c.openingElement.name.name ?? "")) opaque.push(c);
     }
   }
   const regionStart = el.openingElement.end;
@@ -119,6 +130,11 @@ export function applyCompositeEdit(root: string, edit: CompositeEdit): Composite
   for (const part of edit.parts) {
     if (!("tag" in part)) {
       out.push(encodeJsxText(part.text.replace(/\r?\n/g, " ")));
+      continue;
+    }
+    if (part.tag === "svg" && !part.locator) {
+      const icon = opaque.shift();
+      if (icon) out.push(code.slice(icon.start, icon.end));
       continue;
     }
     const loc = part.locator ? parseLocator(part.locator) : null;

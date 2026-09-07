@@ -271,7 +271,26 @@ function searchText(root: string, text: string): TextSlot[] {
       (node, parent, ancestors) => {
         if (node.type === "JSXElement") {
           const slots = textSlots(node, file);
-          if (slots === "composite") return;
+          if (slots === "composite") {
+            // Text next to an icon or a link is still a plain literal: index each text child on its own.
+            for (const c of node.children) {
+              if (c.type !== "JSXText") continue;
+              const rendered = renderJsxText(c.value);
+              if (!rendered.trim()) continue;
+              const leadingNewlines = (/^\s*/.exec(c.value)![0].match(/\n/g) ?? []).length;
+              push({
+                file,
+                line: c.loc.start.line + leadingNewlines,
+                start: c.start,
+                end: c.end,
+                kind: "jsxtext",
+                rendered,
+                raw: c.value,
+                tier: 1,
+              });
+            }
+            return;
+          }
           for (const slot of slots) push({ ...slot, tier: 1 });
         } else if (node.type === "StringLiteral" || node.type === "TemplateLiteral") {
           const tier = literalTier(node, parent, ancestors);
