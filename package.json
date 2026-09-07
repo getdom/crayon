@@ -1,6 +1,6 @@
 {
   "name": "crayon-dev",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Edit your site on the rendered page, write straight to the code. Works on Next, Vite and plain HTML.",
   "keywords": [
     "visual-editor",

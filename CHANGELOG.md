@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-07
+
 ### Added
 
 - Vanilla Vite sites (an `index.html` served by Vite, no React): the page is tagged through `transformIndexHtml` and edited with the HTML writer.
