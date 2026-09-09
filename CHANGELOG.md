@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The Crayon shell: the site now runs in a same-origin iframe below a thin bar, and the bar offers Full / Desktop / Tablet / Phone. The frame is what makes the widths real — media queries answer to the frame's viewport, which no wrapper element could reproduce. The chosen width survives a dev-server reload, since only the frame reloads. `--no-shell` serves the site at the top level as before.
+
 ## [0.5.0] - 2026-09-07
 
 ### Added

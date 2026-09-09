@@ -20,6 +20,11 @@ const main = defineCommand({
     port: { type: "string", description: "Port for the Crayon window", default: "4400" },
     open: { type: "boolean", description: "Open the browser", default: true },
     setup: { type: "boolean", description: "Patch the framework config without asking", default: false },
+    shell: {
+      type: "boolean",
+      description: "Frame the site in the Crayon shell (--no-shell to disable)",
+      default: true,
+    },
   },
   async run({ args }) {
     const root = path.resolve(String(args.dir));
@@ -29,7 +34,7 @@ const main = defineCommand({
     if (project.framework === "static") {
       const session = new EditSession(root, true);
       const port = Number(args.port);
-      const { server, port: actualPort } = await startProxy({ port, root, session });
+      const { server, port: actualPort } = await startProxy({ port, root, session, shell: Boolean(args.shell) });
       const url = `http://localhost:${actualPort}`;
       console.log("");
       console.log(`  ${pc.bold(pc.green("Crayon ready"))}  ${pc.underline(url)}  ${pc.dim("serving this folder")}`);
@@ -64,7 +69,13 @@ const main = defineCommand({
     let server: import("node:http").Server;
     let actualPort = port;
     try {
-      ({ server, port: actualPort } = await startProxy({ target: dev.target, port, root, session }));
+      ({ server, port: actualPort } = await startProxy({
+        target: dev.target,
+        port,
+        root,
+        session,
+        shell: Boolean(args.shell),
+      }));
     } catch (err: any) {
       console.log(pc.red(`Could not listen on port ${port}: ${err.message}`));
       dev.stop();

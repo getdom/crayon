@@ -8,6 +8,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { EditSession } from "./edits.js";
 import { readTheme, type Theme } from "./theme.js";
 import { serveStatic } from "../static/server.js";
+import { shellHtml, wantsShell } from "../shell/index.js";
 
 const OVERLAY_PATH = "/__crayon/overlay.js";
 const THEME_PATH = "/__crayon/theme";
@@ -45,6 +46,8 @@ export interface ProxyOptions {
   port: number;
   root: string;
   session: EditSession;
+  /** Serve the shell — chrome plus the site in a same-origin frame — on top-level navigations. */
+  shell?: boolean;
   onClient?: (count: number) => void;
 }
 
@@ -130,6 +133,16 @@ export function startProxy(opts: ProxyOptions): Promise<ProxyHandle> {
     if (req.url === OVERLAY_PATH) {
       res.writeHead(200, { "content-type": "application/javascript", "cache-control": "no-store" });
       res.end(overlay);
+      return;
+    }
+    if (opts.shell !== false && wantsShell(req.url ?? "/", req.headers)) {
+      const html = shellHtml(req.url ?? "/");
+      res.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+        "content-length": String(Buffer.byteLength(html)),
+      });
+      res.end(html);
       return;
     }
     if (staticHandler) staticHandler(req, res);
