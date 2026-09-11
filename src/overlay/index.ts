@@ -8,6 +8,7 @@ type Locator = { file: string; line: number; column: number } | null;
 const css = `
 :host { all: initial; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 .bar {
   position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px;
@@ -67,6 +68,11 @@ kbd { font: 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #717
 .style .muted { color: #a1a1aa; font-weight: 400; padding: 0 8px; }
 .style .sep { width: 1px; height: 16px; background: rgba(255,255,255,.14); margin: 0 2px; }
 .style button.danger:hover { background: rgba(239,68,68,.18); color: #fca5a5; }
+.devices { display: flex; align-items: center; gap: 2px; }
+.devices button { padding: 0 9px; color: #a1a1aa; }
+.devices button.on { background: rgba(255,255,255,.14); color: #fff; }
+.devices .scale { padding: 0 4px; color: #71717a; font-size: 11px; font-variant-numeric: tabular-nums; }
+.devices .scale:empty { display: none; }
 button.offer { background: #312e81; color: #c7d2fe; }
 button.offer:hover { background: #3730a3; }
 .swatches {
@@ -113,6 +119,23 @@ button.offer:hover { background: #3730a3; }
 .panel .row > * { flex: 1; }
 .panel .actions { display: flex; justify-content: flex-end; gap: 6px; }
 `;
+
+/** What the Crayon shell exposes to the page in its frame. */
+interface Shell {
+  devices: { id: string; label: string; width: number }[];
+  select(id: string): void;
+  subscribe(fn: ((state: { id: string; width: number; scale: number }) => void) | null): void;
+}
+
+/** The Crayon shell around this page, when the page runs in its frame. */
+function shellOf(win: Window): Shell | null {
+  try {
+    if (win.parent === win) return null;
+    return ((win.parent as any).__crayonShell as Shell | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 class Overlay {
   host = document.createElement("div");
@@ -187,7 +210,10 @@ class Overlay {
     this.panel.className = "panel";
     this.styleBar.className = "style";
     this.swatches.className = "swatches";
-    this.root.append(this.bar, this.box, this.panel, this.styleBar, this.swatches);
+    const shell = shellOf(window);
+    if (shell) this.mountInShell(shell);
+    else this.root.append(this.bar);
+    this.root.append(this.box, this.panel, this.styleBar, this.swatches);
     fetch("/__crayon/theme")
       .then((r) => r.json())
       .then((t) => (this.theme = t))
@@ -203,6 +229,53 @@ class Overlay {
     window.addEventListener("scroll", () => this.redraw(), true);
     window.addEventListener("resize", () => this.redraw());
     this.connect();
+  }
+
+  /* ---------- shell ---------- */
+  /**
+   * In the shell, the toolbar lives in the shell's document, above the frame: it keeps its
+   * full width whatever the device, and carries the Full / Desktop / Tablet / Phone switch.
+   */
+  mountInShell(shell: Shell) {
+    const devices = document.createElement("span");
+    devices.className = "devices";
+    const buttons = shell.devices.map((d) => {
+      const b = document.createElement("button");
+      b.textContent = d.label;
+      b.dataset.id = d.id;
+      b.title = d.width ? `${d.width} px` : "Fill the window";
+      b.addEventListener("click", () => shell.select(d.id));
+      return b;
+    });
+    const scale = document.createElement("span");
+    scale.className = "scale";
+    devices.append(...buttons, scale);
+    const sep = document.createElement("span");
+    sep.className = "sep";
+    this.bar.insertBefore(devices, this.status);
+    this.bar.insertBefore(sep, this.status);
+
+    const doc = window.parent.document;
+    doc.getElementById("crayon-toolbar")?.remove();
+    const host = doc.createElement("div");
+    host.id = "crayon-toolbar";
+    const root = host.attachShadow({ mode: "open" });
+    const style = doc.createElement("style");
+    style.textContent = css;
+    root.append(style, this.bar);
+    doc.body.append(host);
+    doc.addEventListener("keydown", this.onKey, true);
+
+    shell.subscribe((s) => {
+      for (const b of buttons) b.classList.toggle("on", b.dataset.id === s.id);
+      scale.textContent = s.scale < 1 ? `${Math.round(s.scale * 100)}%` : "";
+    });
+    // The frame is reloading or leaving: the next page's overlay mounts its own toolbar.
+    window.addEventListener("pagehide", () => {
+      shell.subscribe(null);
+      doc.removeEventListener("keydown", this.onKey, true);
+      host.remove();
+    });
   }
 
   /* ---------- connection ---------- */

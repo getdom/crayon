@@ -35,6 +35,7 @@ const main = defineCommand({
       const session = new EditSession(root, true);
       const port = Number(args.port);
       const { server, port: actualPort } = await startProxy({ port, root, session, shell: Boolean(args.shell) });
+      if (actualPort !== port) console.log(pc.yellow(`Port ${port} is busy, using ${actualPort}.`));
       const url = `http://localhost:${actualPort}`;
       console.log("");
       console.log(`  ${pc.bold(pc.green("Crayon ready"))}  ${pc.underline(url)}  ${pc.dim("serving this folder")}`);

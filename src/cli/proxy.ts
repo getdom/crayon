@@ -57,19 +57,22 @@ export interface ProxyHandle {
 }
 
 /** Listen on the requested port, or the next free one within a small range. */
-function listen(server: http.Server, port: number, attempts = 20): Promise<number> {
+export function listen(server: http.Server, port: number, attempts = 20): Promise<number> {
   return new Promise((resolve, reject) => {
     const tryPort = (p: number, left: number) => {
-      const onError = (err: NodeJS.ErrnoException) => {
+      // A failed attempt must drop its "listening" handler, or it answers for the next port.
+      const onListening = () => {
         server.removeListener("error", onError);
+        resolve(p);
+      };
+      const onError = (err: NodeJS.ErrnoException) => {
+        server.removeListener("listening", onListening);
         if (err.code === "EADDRINUSE" && left > 0) tryPort(p + 1, left - 1);
         else reject(err);
       };
       server.once("error", onError);
-      server.listen(p, "127.0.0.1", () => {
-        server.removeListener("error", onError);
-        resolve(p);
-      });
+      server.once("listening", onListening);
+      server.listen(p, "127.0.0.1");
     };
     tryPort(port, attempts);
   });

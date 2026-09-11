@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { wantsShell, frameUrl, shellHtml, FRAME_PARAM, FRAME_VALUE } from "../src/shell/index.js";
+import { wantsShell, frameUrl, shellHtml, DEVICES, FRAME_PARAM, FRAME_VALUE } from "../src/shell/index.js";
 
 const doc = { "sec-fetch-dest": "document", accept: "text/html,*/*" };
 const frame = { "sec-fetch-dest": "iframe", accept: "text/html,*/*" };
@@ -54,5 +54,12 @@ describe("shellHtml", () => {
     const html = shellHtml("/");
     expect(html.startsWith("<!doctype html>")).toBe(true);
     expect(html).not.toMatch(/src="https?:/);
+  });
+
+  it("has no toolbar of its own and hands the widths to the overlay", () => {
+    const html = shellHtml("/");
+    expect(html).not.toContain('class="bar"');
+    expect(html).toContain("window.__crayonShell");
+    for (const d of DEVICES) expect(html).toContain(`"id":"${d.id}"`);
   });
 });

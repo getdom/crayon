@@ -6,7 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- The Crayon shell: the site now runs in a same-origin iframe below a thin bar, and the bar offers Full / Desktop / Tablet / Phone. The frame is what makes the widths real — media queries answer to the frame's viewport, which no wrapper element could reproduce. The chosen width survives a dev-server reload, since only the frame reloads. `--no-shell` serves the site at the top level as before.
+- The Crayon shell: the site now runs in a same-origin iframe, and the Crayon toolbar offers Full / Desktop / Tablet / Phone. The frame is what makes the widths real — media queries answer to the frame's viewport, which no wrapper element could reproduce. The toolbar sits above the frame, so it keeps its full width at phone size, and the chosen width survives a dev-server reload. `--no-shell` serves the site at the top level as before.
+
+### Fixed
+
+- When the requested port was busy, Crayon printed that port while listening on the next one. It now prints the port it got, and says the requested one was busy for plain HTML sites too.
+- The Publish button no longer shows in folders that are not a git repository: the toolbar's button style overrode `hidden`.
 
 ## [0.5.0] - 2026-09-07
 
